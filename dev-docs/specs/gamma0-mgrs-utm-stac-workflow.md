@@ -2,88 +2,91 @@
 
 ## Context
 
-The current prototype calculates Gamma0 in the BIOMASS L1B radar grid and writes GCP-referenced diagnostic COGs. That preserves source pixels, but separate acquisitions do not share a map grid. Consequently, direct temporal compositing and fusion with spectral data require every consumer to make its own GCP warp.
+The current prototype calculates Gamma0 in the BIOMASS L1B radar grid and writes GCP-referenced diagnostic COGs. Those outputs preserve source pixels, but acquisitions do not share a map grid. Consumers must GCP-warp them before temporal compositing or fusion with spectral data.
 
-This workflow produces analysis-ready Gamma0 outputs on fixed 100 m grids for every standard 100 km MGRS tile intersecting a source granule. Each output is a single-band COG and is described by a STAC Item. The native radar-grid Gamma0 remains an in-process intermediate, not the analysis product.
+This workflow produces fixed-grid, 25 m MGRS tile products from one staged source granule. Each accepted `(source granule, MGRS tile)` pair produces four Beta0 COGs, four linear-Gamma0 COGs, one resampled GammaNought COG, and one display-only RGB thumbnail. A STAC Item describes the product. The native radar-grid Gamma0 remains a diagnostic, never a production asset.
 
 ## Goals
 
-- Convert each selected BIOMASS L1B granule's HH, HV, VH, and VV Beta0 amplitude data to linear Gamma0 using the paired radiometry LUT.
-- Produce one set of four single-band, 100 m COGs for every intersecting 100 km MGRS tile.
-- Use the tile's native UTM CRS and a deterministic, tile-aligned 1,000 × 1,000 pixel grid.
-- Create one STAC Item per `(source granule, MGRS tile)` with one Gamma0 polarization per asset.
-- Retain source provenance, acquisition time, projection details, nodata semantics, and processing metadata.
-- Receive the complete Beta0 TIFF, radiometry LUT, annotation XML, and source STAC Item JSON as staged local inputs before reading source windows. The package does not download source assets.
+- Convert HH, HV, VH, and VV Beta0 amplitude data to linear Gamma0 with the paired radiometry LUT.
+- Produce nine single-band scientific COGs on the exact 100 km MGRS tile grid for each accepted tile.
+- Use the tile's UTM CRS and a deterministic `4000 × 4000` grid at 25 m.
+- Create one STAC Item per `(source granule, MGRS tile)` pair, plus a local Catalog and Collection.
+- Retain acquisition time, projection details, nodata semantics, processing metadata, and sanitized source provenance.
+- Receive a source STAC Item JSON, Beta0 TIFF, radiometry NetCDF, annotation XML, and study-tiles vector as staged local inputs. The production package makes no network requests.
 
 ## Non-goals
 
-- Create temporal composites or biomass-model features. Those consume these tile products.
-- Mosaic overlapping granules.
-- Create a global equal-area output grid.
-- Publish a remote STAC API or manage credentials for publication.
-- Retain a native-grid COG for every production tile. Native-grid diagnostics may be explicitly enabled for validation only.
+- Temporal composites, biomass-model features, or mosaics of overlapping granules.
+- A global equal-area output grid, remote STAC publication, or publication credentials.
+- Production use of native-grid diagnostic COGs.
+- Statistics assets, a parallel tile executor, plugin system, configuration framework, or custom retry layer.
+- A conda runtime manifest or a second dependency lock. `pyproject.toml` and `uv.lock` define the runtime.
 
 ## Constraints and Assumptions
 
-- Output resolution is exactly 100 m.
-- A 100 km MGRS tile is represented by its `mgrs`-derived UTM CRS and exact 100,000 m square extent, so the output grid has shape `[1000, 1000]`.
-- Use the `mgrs` package to enumerate standard 100 km tiles and derive their UTM zone, hemisphere, and bounds. Do not parse tile IDs or create an approximate fishnet.
-- The input Beta0 uses GCP geolocation. GCPs are sufficient to map a densified map-space ROI boundary into radar pixel coordinates and to warp the Gamma0 window into UTM.
+- Output resolution is exactly 25 m, close to the source Beta0 25 m ground-range and 22.36 m azimuth sampling.
+- `mgrs` derives each standard 100 km tile's ID, UTM CRS, hemisphere, and exact 100,000 m bounds. Code must not parse tile IDs or use an approximate fishnet as authoritative geometry.
+- The output grid has shape `[4000, 4000]`.
+- The input Beta0 TIFF has GCP geolocation. Its GCP transformer maps densified map-space tile boundaries to radar pixels and warped window data to UTM.
+- The source STAC bbox and study geometry filter candidates only. GCP overlap determines whether a tile has coverage.
 - Gamma0 is linear intensity: `Beta0_amplitude² × gammaNought`. It is not dB.
-- Internal missing values are `NaN`; final COG nodata is `-9999.0` (`float32`).
-- One source granule can yield zero tile Items when it has no GCP overlap with a candidate MGRS tile.
+- Processing arrays use `NaN` for missing values. Written COGs use `-9999.0` as `float32` nodata.
+- A source granule may yield no accepted tiles. That run still writes a valid empty Catalog and Collection.
 
 ## Architecture Overview
 
 ```text
 upstream orchestration: study AOI + date range
   -> MAAP STAC search for BIOMASS L1B source Items
-  -> stage one source Item JSON + Beta0 TIFF + LUT NetCDF + annotation XML
+  -> stage source Item JSON + Beta0 TIFF + LUT NetCDF + annotation XML + study vector
   -> DPS run (local staged paths only)
+       -> validate source metadata and staged files
        -> read Beta0 header and GCPs
-       -> find intersecting standard MGRS tile footprints
+       -> find source-bbox candidates constrained by study geometry
        -> for each source-item × MGRS-tile pair
             -> densify tile boundary; map it to a padded Beta0 pixel window
-            -> range-read that four-band Beta0 window
-            -> read only the corresponding LUT portion onto the Beta0 window
-            -> calculate windowed HH/HV/VH/VV Gamma0
-            -> one GCP-based warp per polarization to the fixed tile UTM grid
-            -> write four single-band COGs
-            -> write STAC Item JSON referencing those COGs
-  -> local STAC Catalog/Collection JSON
+            -> range-read the four-band Beta0 window
+            -> sample only the required physical-coordinate LUT slice
+            -> calculate windowed Gamma0
+            -> directly warp Beta0, Gamma0, and GammaNought to the tile grid
+            -> validate nine single-band COGs and create an RGB thumbnail
+            -> write and validate the STAC Item, then atomically promote it
+       -> rebuild local STAC Catalog and Collection from valid Item directories
 ```
 
-The workflow must not make a virtual stack from raw radar-geometry data. Stacking is permitted only after all source windows have been warped to an identical target tile grid.
+The package must not build a virtual stack from radar-geometry data. Consumers may stack only assets already warped to an identical tile grid.
 
 ## Processing Design
 
 ### 1. Stage one source granule
 
-1. Upstream orchestration searches MAAP STAC using its selected study area and date interval, then submits one job for every selected `BiomassLevel1b` Item.
-2. Stage the source STAC Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), and `enclosure_annot_xml` (annotation) as OGC `File` inputs.
-3. The package validates required Item asset entries, source ID, acquisition datetime, bbox, and readable staged files. It retains the Item JSON/self link and original asset URLs as provenance.
-4. The package opens the staged Beta0 TIFF directly. It performs no token exchange, STAC search, HTTP request, or cache management.
+1. Upstream orchestration searches MAAP STAC for its selected study area and date range, then submits one job per selected `BiomassLevel1b` Item.
+2. The job stages the source Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), `enclosure_annot_xml` (annotation), and the study-tiles vector as OGC `File` inputs.
+3. The package validates the source ID, acquisition datetime, horizontal bbox, required Item asset entries, study geometry, and readable regular staged files. It rejects antimeridian and polar bboxes for this UTM-only release.
+4. The package retains source ID, collection, time, Item self link, and required asset URLs as provenance after removing URL user info, query parameters, and fragments. It never retain or log signed URLs or credentials.
+5. The package opens staged files directly. It performs no token exchange, STAC search, HTTP request, cache management, or download.
 
-For local development only, a staging adapter may reuse `main.py`'s authenticated `obstore` cache/download helpers to materialize these four inputs before calling the production path.
+For local development, `main.py` may authenticate and use its cache/download helpers to materialize the source Item and three granule assets. The caller supplies the staged study vector before invoking the production workflow.
 
 ### 2. Select MGRS output tiles
 
-1. Use `mgrs` to enumerate standard 100 km MGRS tiles in UTM zones intersecting the source STAC bounds, then filter their WGS84 envelopes against those bounds.
-2. Derive each candidate's UTM zone, hemisphere, and exact 100 km bounds through `MGRSToUTM`.
-3. Open the staged local Beta0 TIFF and obtain its GCPs and GCP CRS.
-4. For each candidate MGRS tile, densify the tile perimeter in the tile UTM CRS, transform it to the GCP CRS, and back-project it to Beta0 pixel coordinates using GDAL's GCP transformer.
-5. Add configurable radar-pixel padding, clip to the source raster, and reject an empty or non-overlapping window.
+1. Use `mgrs` to enumerate standard 100 km MGRS tiles in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox and staged study geometry.
+2. Derive each retained tile's UTM zone, hemisphere, EPSG code, and exact 100 km bounds through `MGRSToUTM`.
+3. Open the staged Beta0 TIFF and obtain its GCPs and GCP CRS.
+4. For each candidate, densify the tile perimeter in the tile UTM CRS, transform it to the GCP CRS, then use GDAL's GCP transformer to back-project it to Beta0 pixel coordinates.
+5. Pad the resulting radar window, clip it to the source raster, and skip the tile when the result is empty, non-finite, or outside the source coverage.
 
-The source STAC footprint is only a cheap candidate filter. The GCP-derived overlap check is authoritative because it reflects the actual radar raster coverage.
+The source bbox and study geometry reduce work. The GCP-derived overlap check remains authoritative.
 
 ### 3. Read and calibrate a source window
 
-1. Read the accepted Beta0 pixel window for all four polarizations from the staged local TIFF.
-2. Shift the Beta0 GCP pixel row/column coordinates into the local window coordinate system; retain the original GCP coordinates separately for provenance/debugging.
-3. Open the staged local NetCDF LUT and annotation XML.
-4. Read `radiometry/gammaNought` plus its coordinate vectors and product annotation values needed to map Beta0 line/sample coordinates to LUT azimuth time and slant-range time.
-5. Determine the LUT region needed for the padded Beta0 window. Bilinearly sample that LUT region directly onto the Beta0 window. Do not interpolate the full LUT or scale array extents as a substitute for physical coordinate mapping.
-6. Convert input nodata to `NaN`, then calculate Gamma0 for each polarization.
+1. Read the accepted four-polarization Beta0 window from the staged TIFF.
+2. Shift GCP row and column coordinates into that window's local frame without mutating the original GCPs.
+3. Parse the staged annotation XML for the azimuth interval, range-pixel spacing, and ground-to-slant polynomial.
+4. Open the staged NetCDF LUT, validate its `(azimuth, range)` coordinate axes, then convert full-source line and sample coordinates for the padded window to physical azimuth and slant-range time.
+5. Read a one-cell-bracketed `radiometry/gammaNought` slice and bilinearly sample it onto the Beta0 window. Do not transpose, flip, scale full LUT extents, or interpolate the full LUT for a tile window.
+6. Convert Beta0 nodata to `NaN` and calculate Gamma0 for each polarization.
 
 ```python
 window_gamma0 = window_beta0.astype("float32") ** 2 * window_gamma_nought
@@ -91,65 +94,68 @@ window_gamma0 = window_beta0.astype("float32") ** 2 * window_gamma_nought
 
 ### 4. Warp to the fixed MGRS grid
 
-For each polarization, warp the Gamma0 window directly from its shifted GCP geometry to the fixed target grid:
+Warp each of the four local Beta0 polarizations, four calibrated Gamma0 polarizations, and the resampled GammaNought window directly from shifted GCP geometry to the fixed MGRS grid:
 
-- destination CRS: the MGRS tile UTM EPSG code
-- destination bounds: exact `mgrs`-derived tile bounds in destination CRS
-- destination transform: north-up, 100 m pixels, aligned to the tile bounds
-- destination shape: `1000 × 1000`
-- resampling: bilinear
-- source nodata: `NaN`
-- destination nodata: `NaN` during computation, `-9999.0` when written
+- destination CRS: the tile UTM EPSG code;
+- destination bounds: exact `mgrs`-derived tile bounds;
+- destination transform: north-up, 25 m pixels aligned to the tile bounds;
+- destination shape: `4000 × 4000`;
+- resampling: bilinear;
+- source nodata: `NaN`;
+- destination nodata: `NaN` during computation and `-9999.0` when written.
 
-There is exactly one interpolation between calibrated radar pixels and the analysis grid. Do not first write a GCP COG and then warp that COG. Do not use cubic or average resampling unless a later validation decision changes this spec.
+Each scientific output has one radar-window-to-tile-grid interpolation. The workflow must not write an intermediate GCP COG and warp it later. It must not use cubic or average resampling unless a later scientific validation decision changes this specification.
 
-A tile output may contain nodata where the source granule only partly covers the tile. Its COG nevertheless retains the complete fixed tile extent and grid, allowing straightforward alignment with other dates and spectral products.
+A partial source footprint leaves nodata in uncovered portions of the complete fixed tile extent.
 
-### 5. Write COG assets
+### 5. Write and validate tile assets
 
-For each `(source item, MGRS tile)` pair, write four assets:
+For every accepted pair, stage this product directory beside its final destination:
 
 ```text
 <output-root>/<mgrs-tile>/<acquisition-date>/<source-item-id>/
+  beta0_hh.tif
+  beta0_hv.tif
+  beta0_vh.tif
+  beta0_vv.tif
   gamma0_hh.tif
   gamma0_hv.tif
   gamma0_vh.tif
   gamma0_vv.tif
+  gamma_nought.tif
+  thumbnail.png
   item.json
 ```
 
-Each GeoTIFF must be:
+The nine GeoTIFFs must be:
 
-- one-band `float32`, linear Gamma0 intensity;
-- tiled with 512-pixel blocks;
-- DEFLATE compressed;
-- a valid Cloud Optimized GeoTIFF;
+- single-band `float32` scientific rasters;
+- tiled with 512-pixel blocks and DEFLATE compression;
+- valid Cloud Optimized GeoTIFFs;
 - north-up with an affine UTM transform, not GCP-only georeferencing;
-- assigned `EPSG:<tile UTM EPSG>`;
-- `-9999.0` nodata;
-- tagged with `QUANTITY=gamma0`, `POLARISATION`, `UNITS=linear`, source item ID, and processing version.
+- assigned the tile EPSG code and `-9999.0` nodata;
+- tagged with quantity, units, source Item ID, and processing version; and
+- tagged with polarization for Beta0 and Gamma0 assets.
 
-The four assets for an Item must have byte-identical projection metadata, bounds, transform, shape, nodata, and valid-data mask geometry aside from any polarization-specific invalid values.
+All nine COGs share CRS, bounds, transform, width, height, nodata, and baseline valid-footprint geometry where their source values are valid. Beta0 and Gamma0 use their corresponding quantity and unit metadata. GammaNought is a single-band calibration-factor asset. The PNG thumbnail is display-only, has three RGB bands, and does not replace a scientific asset or claim COG properties.
+
+Validate all COGs and the thumbnail before writing `item.json` and atomically promoting the staged directory.
 
 ## STAC Design
 
-### Catalog and collection
+### Catalog and Collection
 
-Create a self-contained local STAC Catalog rooted at `<output-root>/catalog.json` and one Collection:
+Create a self-contained local Catalog rooted at `<output-root>/catalog.json` and one Collection:
 
 ```text
-id: biomass-gamma0-mgrs-100m
+id: biomass-gamma0-mgrs-25m
 ```
 
-The Collection has spatial extent covering all emitted Item bboxes and temporal extent covering emitted acquisition datetimes. Update these extents when adding Items. Validate Catalog, Collection, and Items with PySTAC before treating a run as successful.
+After every run, scan nested output directories for valid Items with their required nine COGs and thumbnail. Rebuild Catalog links and Collection spatial and temporal extents from those valid leaf products, then atomically replace root STAC files. This recovers a complete product after an interrupted Catalog update.
 
-Use these extensions on Items and assets where fields are populated:
+When no Item exists, write a valid empty Catalog and Collection with global spatial extent and open temporal extent. Replace those conservative extents when Items exist.
 
-- STAC Projection Extension
-- STAC Raster Extension
-- STAC SAR Extension
-
-The Collection and Item `stac_extensions` must list the exact extension schema URLs used by the installed PySTAC version.
+Validate Catalog, Collection, and Items with PySTAC before reporting success. Use the Projection, Raster, and SAR extensions where fields are populated. Collection and Item `stac_extensions` list the exact schema URLs used by the installed PySTAC version.
 
 ### Item identity and geometry
 
@@ -157,15 +163,15 @@ Create one Item per source granule and MGRS tile:
 
 ```text
 id: gamma0-<source-item-id>-<mgrs-tile-id>
-collection: biomass-gamma0-mgrs-100m
+collection: biomass-gamma0-mgrs-25m
 datetime: source acquisition datetime
 geometry: intersection of source coverage and tile footprint
 bbox: bbox of geometry
 ```
 
-If the reliable source-coverage polygon is unavailable from the GCP transformer, use the MGRS tile geometry for `geometry` and set `maap:partial_coverage=true`; this is a conservative metadata fallback only. The raster's fixed grid remains the full tile.
+When a reliable source-coverage polygon cannot be built from the GCP transformer, use full-tile geometry and set `maap:partial_coverage=true`. This fallback affects Item geometry only; the raster grid remains the full tile.
 
-Required Item properties:
+Required Item properties include:
 
 ```json
 {
@@ -177,52 +183,42 @@ Required Item properties:
   "sar:polarizations": ["HH", "HV", "VH", "VV"],
   "processing:level": "Gamma0",
   "maap:source_item_id": "<source item ID>",
-  "maap:source_collection": "BiomassLevel1b",
-  "maap:processing_version": "<package/git version>",
+  "maap:source_collection": "<source collection>",
+  "maap:processing_version": "<package version>",
   "proj:epsg": "<tile UTM EPSG>",
-  "proj:shape": [1000, 1000],
-  "proj:transform": [100.0, 0.0, "<xmin>", 0.0, -100.0, "<ymax>"]
+  "proj:shape": [4000, 4000],
+  "proj:transform": [25.0, 0.0, "<xmin>", 0.0, -25.0, "<ymax>"]
 }
 ```
 
-`mgrs:*`, `maap:*`, and `processing:*` fields are project conventions until a corresponding STAC extension is adopted; document them in the Collection summaries and descriptions.
+Copy SAR mode, orbit, pass direction, and processing-baseline fields only when the source provides them. `mgrs:*`, `maap:*`, and `processing:*` remain project conventions until the project adopts corresponding STAC extensions; document them in Collection descriptions and summaries.
 
-### Gamma0 assets
+Add a `source` link to the sanitized input Item self HREF when available. Add sanitized `derived_from` links to the Beta0 TIFF and radiometry NetCDF source URLs.
 
-Each Item has four data assets, never a multiband Gamma0 asset:
+### Assets
 
-| Asset key | Filename | Polarization | Required roles |
-|---|---|---|---|
-| `gamma0_hh` | `gamma0_hh.tif` | `HH` | `data`, `gamma0` |
-| `gamma0_hv` | `gamma0_hv.tif` | `HV` | `data`, `gamma0` |
-| `gamma0_vh` | `gamma0_vh.tif` | `VH` | `data`, `gamma0` |
-| `gamma0_vv` | `gamma0_vv.tif` | `VV` | `data`, `gamma0` |
+Each Item has nine scientific COG data assets and one display-only thumbnail:
 
-Every asset includes:
+| Asset key | Filename | Quantity | Polarization | Roles |
+|---|---|---|---|---|
+| `beta0_hh` | `beta0_hh.tif` | Beta0 amplitude | HH | `data`, `beta0` |
+| `beta0_hv` | `beta0_hv.tif` | Beta0 amplitude | HV | `data`, `beta0` |
+| `beta0_vh` | `beta0_vh.tif` | Beta0 amplitude | VH | `data`, `beta0` |
+| `beta0_vv` | `beta0_vv.tif` | Beta0 amplitude | VV | `data`, `beta0` |
+| `gamma0_hh` | `gamma0_hh.tif` | linear Gamma0 intensity | HH | `data`, `gamma0` |
+| `gamma0_hv` | `gamma0_hv.tif` | linear Gamma0 intensity | HV | `data`, `gamma0` |
+| `gamma0_vh` | `gamma0_vh.tif` | linear Gamma0 intensity | VH | `data`, `gamma0` |
+| `gamma0_vv` | `gamma0_vv.tif` | linear Gamma0 intensity | VV | `data`, `gamma0` |
+| `gamma_nought` | `gamma_nought.tif` | GammaNought calibration factor | n/a | `data`, `calibration` |
+| `thumbnail` | `thumbnail.png` | display-only RGB composite | n/a | `thumbnail`, `overview` |
 
-```json
-{
-  "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-  "title": "Gamma0 <polarization>, linear intensity",
-  "roles": ["data", "gamma0"],
-  "proj:epsg": "<tile UTM EPSG>",
-  "proj:shape": [1000, 1000],
-  "proj:transform": [100.0, 0.0, "<xmin>", 0.0, -100.0, "<ymax>"],
-  "raster:bands": [{
-    "data_type": "float32",
-    "nodata": -9999.0,
-    "unit": "1",
-    "description": "Gamma0 linear intensity (<polarization>)"
-  }],
-  "sar:polarizations": ["<polarization>"]
-}
-```
+Each scientific asset includes its media type, Projection extension fields, a one-band Raster extension entry, and SAR polarization metadata where applicable. Gamma0 raster-band metadata uses `float32`, `-9999.0` nodata, unit `1`, and a linear-intensity description. The thumbnail has image media type and RGB metadata but no scientific Raster or SAR claims.
 
-Add a `source` link from every output Item to the input L1B STAC Item self link when available. Add `derived_from` links to the paired Beta0 TIFF and radiometry NetCDF URLs, without embedding credentials or tokens.
+## Package and Runtime Interface
 
-## Interfaces and Configuration
+The installable package lives under `src/esa_biomass_gamma0/`. It owns one staged-source workflow API and an `argparse` CLI. Root `run.py`, `run.sh`, CWL, the notebook, and diagnostic adapters call package code instead of duplicating processing logic.
 
-The production entry point accepts one staged source granule. Upstream orchestration owns date-range discovery and creates one DPS job per selected Item:
+The production entry point handles one staged source granule:
 
 ```text
 process-gamma0 \
@@ -232,97 +228,93 @@ process-gamma0 \
   --annotation-xml path/to/annotation.xml \
   --study-tiles path/to/boreal_tiles.gpkg \
   --output-root output/ \
-  --resolution 100
+  --resolution 25 \
+  --overwrite
 ```
-
-Required configuration:
 
 | Setting | Meaning |
 |---|---|
-| `source_item` | Staged source STAC Item JSON, retaining ID, time, bbox, and provenance |
-| `beta0_tiff` | Staged `enclosure_tiff` local file |
-| `radiometry_lut` | Staged `enclosure_nc` local file |
-| `annotation_xml` | Staged `enclosure_annot_xml` local file |
-| `study_tiles_path` | Boreal AOI/tile index used to constrain tile processing |
-| `output_root` | Package output directory (`./output` in the DPS runtime) |
-| `resolution_m` | Fixed at `100` for this product version |
-| `window_padding_pixels` | Radar-window safety margin around a back-projected tile boundary |
-| `processing_version` | Code/package or git version stored in COG/STAC metadata |
+| `source_item` | Staged source STAC Item JSON with identity, time, bbox, and provenance |
+| `beta0_tiff` | Staged `enclosure_tiff` file |
+| `radiometry_lut` | Staged `enclosure_nc` file |
+| `annotation_xml` | Staged `enclosure_annot_xml` file |
+| `study_tiles` | Staged vector geometry that filters candidate MGRS tiles |
+| `output_root` | Output directory, fixed to `./output` by the DPS wrapper |
+| `resolution` | Fixed at `25` for this release |
+| `overwrite` | Rebuild an otherwise complete tile product |
+| `window_padding_pixels` | Internal radar-window safety margin for scientific tuning |
+| `processing_version` | Installed package version stored in COG and STAC metadata |
 
-`algorithm.yml` and the CWL wrapper expose the first four settings as required
-OGC `File` inputs and stage them before `run.py` starts. The production package
-has no MAAP credentials. Credentials used upstream or in a local test staging
-adapter must never enter config files, output metadata, logs, or STAC JSON.
+`algorithm.yml`, CWL, `run.sh`, `run.py`, and the package CLI expose the same five staged `File` inputs and matching defaults for `resolution` and `overwrite`. CWL disables network access and returns `./output` as a `Directory`.
+
+`build.sh` installs the frozen production environment with `uv sync --frozen --no-dev`. `run.sh` creates `./output` and forwards staged paths through `uv run --frozen --no-dev`. `pyproject.toml` and `uv.lock` remain the only dependency definition and lock. Production dependencies belong in `[project.dependencies]`; notebook, authenticated-staging, plotting, and test dependencies belong in development groups where possible.
 
 ## Failure Handling and Idempotency
 
-- Skip and log a tile when GCP back-projection finds no overlap.
-- Fail the source-item run when required staged inputs, Item metadata, GCPs, LUT coordinates, or acquisition time are missing.
-- Fail a tile when its warp cannot establish the fixed destination grid or when all four outputs are entirely nodata.
-- Write assets to temporary paths and atomically promote them only after COG validation succeeds.
-- Write `item.json` only after all four COGs validate.
-- Treat an existing valid `item.json` plus its four valid assets as complete and skip it unless `--overwrite` is set.
-- Leave incomplete temporary outputs identifiable for cleanup; do not register them in STAC.
+- Fail the source run for missing or invalid staged inputs, source metadata, study geometry, GCPs, LUT coordinates, annotation values, or acquisition time.
+- Skip and log a candidate when GCP back-projection finds no overlap or a scientific warp is all nodata.
+- Stage a leaf product in a sibling temporary directory. Promote it only after nine COGs, the thumbnail, and `item.json` validate.
+- Treat an existing valid Item with all required local assets as complete unless `--overwrite` is set.
+- Build an overwrite replacement before replacing a valid predecessor.
+- Do not register incomplete directories. Leave identifiable temporary directories for cleanup.
+- Rebuild root STAC files from valid leaf products after each source run. A subsequent run repairs stale registration after an interruption.
 
 ## Validation and Testing Strategy
 
-### Unit tests
+### Deterministic tests
 
-- Target-grid construction yields the exact expected UTM CRS, 100 m transform, bounds, and `1000 × 1000` shape for representative northern and southern hemisphere MGRS tiles.
-- Candidate-tile selection and GCP boundary back-projection correctly accept, reject, clip, pad, and shift windows using synthetic GCPs.
-- LUT coordinate interpolation samples expected values at window edges and handles nodata as `NaN`.
-- Gamma0 conversion preserves `NaN` and computes expected linear values.
-- Single-band COG writer sets CRS, transform, nodata, band count, compression, and polarization metadata correctly.
-- STAC construction has four named assets, source links, source datetime, tile metadata, and projection/raster/SAR fields.
-
-### Integration tests
-
-- Stage one MAAP-backed granule, then process it over a small set of intersecting tiles.
-- Confirm that all four assets for every Item open as COGs and have identical target-grid metadata.
-- Confirm that two different granules written for the same MGRS tile have identical CRS, transform, width, and height.
-- Confirm that a spectral raster reprojected or clipped to the same tile grid aligns without an additional Gamma0 warp.
-- Validate emitted STAC with PySTAC and a STAC validator that supports the selected extension versions.
+- Staged-input validation covers source identity, time, bbox normalization, required assets, five readable local files, provenance sanitization, antimeridian/polar rejection, and no-network behavior.
+- MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries; study geometry filters candidates without defining MGRS bounds.
+- Synthetic GCP tests cover boundary densification, acceptance, rejection, padding, clipping, non-finite mappings, and local-GCP shifting.
+- Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
+- Raster tests use real temporary files to validate direct warps, nine single-band COGs, thumbnail structure, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
+- STAC tests validate Item geometry fallback, all ten assets, source links, time, projection/raster/SAR metadata, Catalog rebuild, empty results, idempotency, overwrite safety, and recovery after stale registration.
+- DPS contract tests validate input and default parity across algorithm metadata, CWL, shell wrappers, and CLI, and ensure CWL has no network or credential configuration.
 
 ### Scientific validation gates
 
-Before scaling, compare the windowed-LUT workflow against the full-frame reference for one granule. The maximum Gamma0 difference over valid pixels must remain below `1e-3` after matching calculation and resampling conventions.
+Before release promotion, compare windowed LUT sampling with the full-frame diagnostic reference for one granule. Valid-pixel Gamma0 differences must remain below `1e-3` after matching calculation and resampling conventions.
 
-For at least one tile near a swath edge and one in the swath interior, inspect GCP-warped Gamma0 against independent map features and the intended spectral dataset. Record positional residuals and the GDAL transformer/resampling settings used.
+Inspect one swath-edge tile and one swath-interior tile against independent map features and the intended spectral dataset. Record positional residuals and the GDAL transformer and bilinear-resampling settings.
 
 ## Migration Path
 
-1. Keep `main.py` and its native GCP COGs as the diagnostic reference while correcting and validating physical-coordinate LUT alignment.
-2. Extract reusable helpers for staged-input validation, GCP-window calculation, LUT sampling, Gamma0 calculation, fixed-grid warp, COG writing, and STAC serialization.
-3. Add a one-staged-granule, one-tile integration path and validate it against the native/full-frame reference.
-4. Add candidate MGRS-tile discovery and process every intersecting tile for a staged source Item.
-5. Emit local Catalog/Collection/Item metadata after COG validation.
-6. Add the DPS OGC Application Package wrappers with four staged source `File` inputs; retain `main.py` download helpers only for local test staging.
-7. Deprecate production use of native-grid `gamma0.tif`; retain it only behind an explicit diagnostic flag.
+1. Keep `main.py` as the authenticated local staging adapter and native-grid diagnostic while characterizing its calibration results.
+2. Establish `src/esa_biomass_gamma0/` with deterministic tests, then extract staged-input validation, grid/GCP, calibration, raster, STAC, and workflow helpers.
+3. Route `main.py` and the proof-of-concept notebook through shared physical-coordinate calibration helpers without changing their diagnostic responsibilities.
+4. Implement the sequential staged-source workflow, nine COG assets, thumbnail, atomic product promotion, and Catalog recovery.
+5. Add `run.py`, `run.sh`, CWL, `algorithm.yml`, and `build.sh` as thin uv-based MAAP adapters.
+6. Update README and operational documentation with the package layout, staged inputs, output contract, empty-Catalog behavior, and scientific acceptance gate.
 
-Existing native GCP COG outputs are not backward-compatible analysis assets. They remain valid diagnostics but must not be mixed with the new UTM tile collection.
+Existing native GCP COGs remain diagnostics. They must not join the UTM tile collection or analysis-ready temporal stacks.
 
 ## Decision Log
 
-| Decision | Options considered | Rationale |
+| Decision | Choice | Rationale |
 |---|---|---|
-| Output CRS/grid | GCP-only radar grid; one project-wide Albers grid; per-tile UTM grid | Per-tile UTM is requested, maps naturally to MGRS tiles, and creates fixed grids for compositing. |
-| Tile size and resolution | Arbitrary AOI chips; 100 km MGRS tiles at 100 m | Standard tile identifiers aid downstream joins; fixed extent gives 1,000 × 1,000 outputs. |
-| Item granularity | One Item per granule; one per tile/date; one per composite | One Item per granule × tile preserves acquisition provenance while keeping all same-grid bands together. |
-| Gamma0 packaging | Four-band COG; four single-band COGs | Four assets allow polarization-specific access and meet the requested STAC layout. |
-| Geocoding point | Preserve GCPs in output; warp at end; warp Beta0 before calibration | Warp once after radar-space LUT calibration avoids unnecessary interpolation and yields an analysis-ready affine grid. |
-| Resampling | Nearest; bilinear; cubic | Bilinear is the established workflow choice and has one controlled interpolation step. |
-| MGRS geometry | Generate from tile IDs; authoritative tile index | `mgrs` derives standard tile IDs, UTM zones, hemispheres, and exact bounds without a separately maintained index. |
+| Output CRS/grid | Per-tile UTM grid | MGRS supplies standard identifiers and fixed grids for compositing. |
+| Tile size and resolution | 100 km MGRS tiles at 25 m | This preserves the 25 m ground-range source sampling on a fixed `4000 × 4000` grid. |
+| Item granularity | One Item per source granule × tile | It preserves acquisition provenance while grouping same-grid assets. |
+| Scientific assets | Four Beta0, four Gamma0, and one GammaNought COG | Downstream users can inspect source amplitudes and the calibration factor beside Gamma0 without multiband rasters. |
+| Display asset | One RGB thumbnail outside the scientific raster contract | It supports browsing without changing the COG data model. |
+| Geocoding | Direct local-window warp per scientific output | This avoids intermediate GCP COGs and gives each output one controlled interpolation. |
+| Resampling | Bilinear | The workflow controls a single documented interpolation step. |
+| MGRS geometry | `mgrs` round-trip with study-geometry filtering | `mgrs` owns IDs, zones, hemispheres, and bounds; the study file only limits work. |
+| Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
+| Runtime | Frozen uv environment from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution. |
+| Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |
+| Empty source result | Valid empty Catalog and Collection | A source can have no GCP-overlapping candidates while the DPS output contract still requires root STAC files. |
 
 ## Open Questions
 
-- Which source STAC fields reliably contain BIOMASS platform, instrument mode, orbit/pass direction, and processing baseline, so they can be copied instead of guessed?
-- Should the final Collection include optional quicklook assets or statistics assets, or are four Gamma0 data assets sufficient for the first release?
-- What storage prefix and publication target will host the local Catalog once the product moves beyond local processing?
+- Which source STAC fields reliably contain BIOMASS instrument mode, orbit/pass direction, and processing baseline?
+- Which documented Gamma0 polarization mapping, scaling, and image encoding should produce `thumbnail.png`?
+- What storage prefix and publication target will host the local Catalog after local processing?
 
 ## References
 
 - `AGENTS.md` — project workflow requirements and staged-input guardrails
-- `main.py` — current native-GCP diagnostic implementation
-- `README.md` — Gamma0/LUT alignment requirements
-- `above_gamma0/Gamma0_workflow_optimized.ipynb` — reference workflow
-- `above_gamma0/BL1_Gamma0.py` — existing Gamma0 calculation helpers
+- `dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md` — package and DPS implementation plan
+- `main.py` — native-GCP diagnostic and local staging reference
+- `poc.ipynb` — tiled proof of concept
+- `README.md` — package usage and validation status
