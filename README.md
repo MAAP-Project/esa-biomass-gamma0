@@ -18,13 +18,14 @@ product:
   for local testing, align the radiometry LUT in radar geometry, calculate
   Gamma0, and write native-grid GCP-referenced COGs.
 - `src/esa_biomass_gamma0/` is installable and provides local-only
-  staged-source validation, MGRS target-grid/GCP-window helpers, and windowed
-  physical-coordinate calibration. `main.py` and the notebook share the
-  calibration helpers. The package accepts a source Item JSON, Beta0 TIFF,
-  radiometry LUT NetCDF, and annotation XML as local paths; it does not retrieve
+  staged-source validation, MGRS target-grid/GCP-window helpers, windowed
+  physical-coordinate calibration, and direct-warp/COG/thumbnail helpers.
+  `main.py` and the notebook share the calibration helpers. The package accepts
+  a source Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as
+  local paths; it does not retrieve
   source assets.
-- The remaining workflow work is direct fixed-UTM warps, COG/STAC output, and
-  the DPS wrapper. Native-GCP diagnostics are not
+- The remaining workflow work is product orchestration, STAC output, and the
+  DPS wrapper. Native-GCP diagnostics are not
   analysis-ready tile products and must not join the production collection.
 
 ## Product contract
