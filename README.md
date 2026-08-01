@@ -21,13 +21,13 @@ product:
   staged-source validation, MGRS target-grid/GCP-window helpers, windowed
   physical-coordinate calibration, direct-warp/COG/thumbnail helpers, and a
   sequential staged-source workflow that atomically promotes complete products
-  and rebuilds local STAC metadata.
-  `main.py` and the notebook share the calibration helpers. The package accepts
-  a source Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as
-  local paths; it does not retrieve
-  source assets.
-- The remaining work is the package CLI and DPS wrapper. Native-GCP diagnostics are not
-  analysis-ready tile products and must not join the production collection.
+  and rebuilds local STAC metadata. Its `process-gamma0` CLI accepts a source
+  Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as local
+  paths; it does not retrieve source assets.
+- `algorithm.yml`, `esa-biomass-gamma0.cwl`, `build.sh`, and `run.sh` package
+  that CLI for MAAP without network access or credentials. Native-GCP
+  diagnostics are not analysis-ready tile products and must not join the
+  production collection.
 
 ## Product contract
 
@@ -82,7 +82,7 @@ Items use `gamma0-<source-item-id>-<mgrs-tile-id>` in the
 SAR, MGRS, and processing provenance metadata. A source with no accepted tile
 still produces a valid empty Catalog and Collection.
 
-## Planned package layout
+## Package layout
 
 ```text
 algorithm.yml                    # MAAP algorithm metadata, resources, and inputs
@@ -117,11 +117,29 @@ defaults. The four paths stage as CWL `File` values. CWL returns `./output` as a
 ## Development
 
 The project uses `uv`. `pyproject.toml` and `uv.lock` provide the only runtime
-dependency definition and lock. The future DPS build uses:
+dependency definition and lock.
 
 ```bash
-uv sync --frozen --no-dev
+uv sync --frozen
+uv run --frozen --no-dev process-gamma0 \
+  --source-item path/to/source-item.json \
+  --beta0-tiff path/to/enclosure.tif \
+  --radiometry-lut path/to/enclosure.nc \
+  --annotation-xml path/to/annotation.xml \
+  --output-root output
 ```
+
+`run.py` invokes the same CLI. The MAAP wrappers fix the output root to
+`./output`:
+
+```bash
+./build.sh
+./run.sh --source-item path/to/source-item.json --beta0-tiff path/to/enclosure.tif \
+  --radiometry-lut path/to/enclosure.nc --annotation-xml path/to/annotation.xml
+```
+
+An empty source result is successful and still writes `output/catalog.json` and
+`output/collection.json` with global spatial and open temporal extents.
 
 The current diagnostic can materialize local test inputs with `main.py`'s
 `fetch_assets`, `cache_paths`, and `write_cached_asset` helpers. Supply MAAP

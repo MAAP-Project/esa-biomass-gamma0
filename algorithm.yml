@@ -1,0 +1,42 @@
+algorithm_name: esa_biomass_gamma0
+algorithm_version: 0.1.0
+algorithm_description: >-
+  Create fixed-grid 25 m MGRS Beta0 and linear Gamma0 products from one staged
+  ESA BIOMASS Level-1B source Item and its local raster, LUT, and annotation files.
+code_repository: https://github.com/MAAP-Project/esa-biomass-gamma0
+run_command: esa-biomass-gamma0/run.sh
+build_command: esa-biomass-gamma0/build.sh
+ram_min: 8
+cores_min: 4
+base_container_url: mas.dit.maap-project.org/root/maap-workspaces/custom_images/maap_base:develop
+inputs:
+  - name: source_item
+    label: Source STAC Item
+    doc: Staged source STAC Item JSON.
+    type: File
+  - name: beta0_tiff
+    label: Beta0 TIFF
+    doc: Staged four-band enclosure_tiff asset.
+    type: File
+  - name: radiometry_lut
+    label: Radiometry LUT
+    doc: Staged enclosure_nc radiometry LUT NetCDF.
+    type: File
+  - name: annotation_xml
+    label: Annotation XML
+    doc: Staged enclosure_annot_xml annotation asset.
+    type: File
+  - name: resolution
+    label: Output resolution
+    doc: Fixed output resolution in metres. This release accepts 25 only.
+    type: double
+    default: 25
+  - name: overwrite
+    label: Overwrite complete products
+    doc: Rebuild an otherwise complete source Item and MGRS tile product.
+    type: boolean
+    default: false
+outputs:
+  - name: output
+    type: Directory
+outdir_max: 20

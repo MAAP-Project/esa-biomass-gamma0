@@ -58,7 +58,7 @@ or architectural decision.
 
 STAC search, authentication, and asset download belong upstream. For local
 validation, `main.py` may materialize the source Item and three granule assets;
-the caller stages the study vector before invoking the production path.
+the production path accepts the four staged local files without an AOI or study-vector input.
 
 ## Output contract
 
@@ -161,7 +161,7 @@ Keep deterministic tests for:
 - staged-source validation, including source identity, time, bbox, required
   asset entries, four readable files, URL sanitization, and no-network behavior;
 - MGRS target-grid CRS, bounds, transform, and `4000 × 4000` shape in both
-  hemispheres, including candidate and study-geometry filtering;
+  hemispheres, including source-bbox candidate filtering without an AOI input;
 - GCP boundary back-projection, padding, clipping, rejection, and local-GCP
   shifting with synthetic GCPs;
 - physical-coordinate LUT interpolation and `NaN`-preserving Gamma0 math;

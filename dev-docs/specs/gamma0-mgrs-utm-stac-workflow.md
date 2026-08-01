@@ -66,7 +66,7 @@ The package must not build a virtual stack from radar-geometry data. Consumers m
 4. The package retains source ID, collection, time, Item self link, and required asset URLs as provenance after removing URL user info, query parameters, and fragments. It never retain or log signed URLs or credentials.
 5. The package opens staged files directly. It performs no token exchange, STAC search, HTTP request, cache management, or download.
 
-For local development, `main.py` may authenticate and use its cache/download helpers to materialize the source Item and three granule assets. The caller supplies the staged study vector before invoking the production workflow.
+For local development, `main.py` may authenticate and use its cache/download helpers to materialize the source Item and three granule assets. The production workflow receives those four staged local files and does not accept an AOI or study-vector input.
 
 ### 2. Select MGRS output tiles
 
@@ -240,7 +240,7 @@ process-gamma0 \
 | `window_padding_pixels` | Internal radar-window safety margin for scientific tuning |
 | `processing_version` | Installed package version stored in COG and STAC metadata |
 
-`algorithm.yml`, CWL, `run.sh`, `run.py`, and the package CLI expose the same four staged `File` inputs and matching defaults for `resolution` and `overwrite`. CWL disables network access and returns `./output` as a `Directory`.
+`algorithm.yml` and CWL expose the four staged inputs as `File` values with matching defaults for `resolution` and `overwrite`. `run.sh`, `run.py`, and the `process-gamma0` package CLI accept the same local path names; the DPS wrapper fixes `output_root` to `./output`. CWL disables network access and returns `./output` as a `Directory`.
 
 `build.sh` installs the frozen production environment with `uv sync --frozen --no-dev`. `run.sh` creates `./output` and forwards staged paths through `uv run --frozen --no-dev`. `pyproject.toml` and `uv.lock` remain the only dependency definition and lock. Production dependencies belong in `[project.dependencies]`; notebook, authenticated-staging, plotting, and test dependencies belong in development groups where possible.
 
@@ -294,7 +294,7 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | Display asset | One RGB thumbnail outside the scientific raster contract | It supports browsing without changing the COG data model. |
 | Geocoding | Direct local-window warp per scientific output | This avoids intermediate GCP COGs and gives each output one controlled interpolation. |
 | Resampling | Bilinear | The workflow controls a single documented interpolation step. |
-| MGRS geometry | `mgrs` round-trip with study-geometry filtering | `mgrs` owns IDs, zones, hemispheres, and bounds; the study file only limits work. |
+| MGRS geometry | `mgrs` round-trip filtered only by source bbox | `mgrs` owns IDs, zones, hemispheres, and bounds; GCP overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environment from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution. |
 | Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |
