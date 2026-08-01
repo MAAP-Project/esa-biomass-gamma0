@@ -181,8 +181,6 @@ Required Item properties include:
   "sar:instrument_mode": "<from source when available>",
   "sar:polarizations": ["HH", "HV", "VH", "VV"],
   "processing:level": "Gamma0",
-  "maap:source_item_id": "<source item ID>",
-  "maap:source_collection": "<source collection>",
   "maap:processing_version": "<package version>",
   "proj:epsg": "<tile UTM EPSG>",
   "proj:shape": [4000, 4000],
@@ -192,7 +190,7 @@ Required Item properties include:
 
 Copy SAR mode, orbit, pass direction, and processing-baseline fields only when the source provides them. `mgrs:*`, `maap:*`, and `processing:*` remain project conventions until the project adopts corresponding STAC extensions; document them in Collection descriptions and summaries.
 
-Add a `source` link to the sanitized input Item self HREF when available. Add sanitized `derived_from` links to the Beta0 TIFF and radiometry NetCDF source URLs.
+Add a `derived_from` link to the sanitized input Item self HREF when available. Add sanitized `via` links to the Beta0 TIFF and radiometry NetCDF source URLs.
 
 ### Assets
 

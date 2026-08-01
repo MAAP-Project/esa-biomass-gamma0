@@ -140,7 +140,14 @@ def test_returns_none_when_every_direct_warp_is_nodata() -> None:
     empty = np.full((4, 10, 10), np.nan, dtype="float32")
 
     assert (
-        warp_scientific_arrays(empty, empty, empty[0], _gcps(grid), grid.crs, grid)
+        warp_scientific_arrays(
+            empty,
+            empty,
+            np.ones(grid.shape, dtype="float32"),
+            _gcps(grid),
+            grid.crs,
+            grid,
+        )
         is None
     )
 

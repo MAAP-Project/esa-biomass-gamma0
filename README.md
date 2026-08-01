@@ -19,13 +19,14 @@ product:
   Gamma0, and write native-grid GCP-referenced COGs.
 - `src/esa_biomass_gamma0/` is installable and provides local-only
   staged-source validation, MGRS target-grid/GCP-window helpers, windowed
-  physical-coordinate calibration, and direct-warp/COG/thumbnail helpers.
+  physical-coordinate calibration, direct-warp/COG/thumbnail helpers, and a
+  sequential staged-source workflow that atomically promotes complete products
+  and rebuilds local STAC metadata.
   `main.py` and the notebook share the calibration helpers. The package accepts
   a source Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as
   local paths; it does not retrieve
   source assets.
-- The remaining workflow work is product orchestration, STAC output, and the
-  DPS wrapper. Native-GCP diagnostics are not
+- The remaining work is the package CLI and DPS wrapper. Native-GCP diagnostics are not
   analysis-ready tile products and must not join the production collection.
 
 ## Product contract

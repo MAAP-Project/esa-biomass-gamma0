@@ -36,10 +36,7 @@ def warp_scientific_arrays(
     warped_beta0 = _warp_stack(beta0, gcps, gcp_crs, grid)
     warped_gamma0 = _warp_stack(gamma0, gcps, gcp_crs, grid)
     warped_gamma_nought = _warp_array(gamma_nought, gcps, gcp_crs, grid)
-    if not any(
-        np.isfinite(array).any()
-        for array in (warped_beta0, warped_gamma0, warped_gamma_nought)
-    ):
+    if not any(np.isfinite(array).any() for array in (warped_beta0, warped_gamma0)):
         return None
     return warped_beta0, warped_gamma0, warped_gamma_nought
 
