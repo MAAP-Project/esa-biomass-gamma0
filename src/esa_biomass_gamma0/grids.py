@@ -121,14 +121,12 @@ def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
             epsg = (32600 if hemisphere == "N" else 32700) + zone
             to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
             xmin, ymin, xmax, ymax = to_utm.transform_bounds(*bbox, densify_pts=21)
-            to_wgs84 = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
             for easting in range(max(100_000, math.floor(xmin / 100_000 - 1) * 100_000), min(900_000, math.floor(xmax / 100_000 + 1) * 100_000) + 1, 100_000):
                 for northing in range(max(0, math.floor(ymin / 100_000 - 1) * 100_000), min(9_900_000, math.floor(ymax / 100_000 + 1) * 100_000) + 1, 100_000):
                     try:
-                        provisional = MGRS_CONVERTER.UTMToMGRS(zone, hemisphere, easting, northing, MGRSPrecision=0)
-                        candidate = target_grid(provisional)
-                        lon, lat = to_wgs84.transform((candidate.bounds[0] + candidate.bounds[2]) / 2, (candidate.bounds[1] + candidate.bounds[3]) / 2)
-                        tile_id = MGRS_CONVERTER.toMGRS(lat, lon, MGRSPrecision=0)
+                        tile_id = MGRS_CONVERTER.UTMToMGRS(
+                            zone, hemisphere, easting, northing, MGRSPrecision=0
+                        )
                         grid = target_grid(tile_id)
                     except MGRSError:
                         continue
