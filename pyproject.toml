@@ -16,6 +16,9 @@ dependencies = [
     "scipy>=1.18.0",
 ]
 
+[project.scripts]
+process-gamma0 = "esa_biomass_gamma0.cli:main"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
