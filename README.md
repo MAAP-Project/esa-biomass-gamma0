@@ -18,8 +18,8 @@ product:
   for local testing, align the radiometry LUT in radar geometry, calculate
   Gamma0, and write native-grid GCP-referenced COGs.
 - The production package does not exist yet. It will receive a staged source
-  Item JSON, Beta0 TIFF, radiometry LUT NetCDF, annotation XML, and study-tiles
-  vector as local paths. It will not retrieve source assets.
+  Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as local
+  paths. It will not retrieve source assets.
 - The proof of concept and the implementation plan cover MGRS window selection,
   fixed-UTM warps, COGs, STAC, and the DPS wrapper. Native-GCP diagnostics are
   not analysis-ready tile products and must not join the production collection.
@@ -29,10 +29,10 @@ product:
 For each accepted source Item and intersecting standard 100 km MGRS tile, the
 production package will:
 
-1. Validate five staged local inputs. The source Item supplies identity,
+1. Validate four staged local inputs. The source Item supplies identity,
    acquisition time, bbox, and sanitized provenance.
-2. Use the source bbox and study geometry only to filter MGRS candidates.
-   Densified tile-boundary back-projection through the Beta0 GCP transformer
+2. Use the source bbox only to filter MGRS candidates. Densified tile-boundary
+   back-projection through the Beta0 GCP transformer
    determines coverage.
 3. Read a padded local Beta0 window, sample only the required LUT region in
    radar coordinates, and calculate `Gamma0 = Beta0_amplitude² × gammaNought`.
@@ -102,12 +102,11 @@ processing logic.
 | `beta0_tiff` | File | Staged `enclosure_tiff` asset. |
 | `radiometry_lut` | File | Staged `enclosure_nc` asset. |
 | `annotation_xml` | File | Staged `enclosure_annot_xml` asset. |
-| `study_tiles` | File | Staged study geometry used to filter candidate tiles. |
 | `resolution` | number | Resolution in metres. Version 1 accepts only `25`. |
 | `overwrite` | boolean | Rebuild a valid existing source-Item × tile product. |
 
 `algorithm.yml`, CWL, shell wrappers, and the CLI use these names and matching
-defaults. The five paths stage as CWL `File` values. CWL returns `./output` as a
+defaults. The four paths stage as CWL `File` values. CWL returns `./output` as a
 `Directory`.
 
 ## Development
@@ -141,7 +140,7 @@ committed configuration.
 ## Non-negotiable processing rules
 
 - Derive MGRS IDs, UTM zones, and exact bounds through `mgrs`; do not parse IDs,
-  use a hard-coded fishnet, or rely on the study geometry for tile extents.
+  use a hard-coded fishnet, or rely on source-bbox approximations for tile extents.
 - Calibrate in radar geometry before geocoding. A later GCP warp cannot repair
   a LUT sampled at incorrect radar coordinates.
 - Preserve LUT axis order `(azimuth, range)`; do not transpose, flip, or stretch

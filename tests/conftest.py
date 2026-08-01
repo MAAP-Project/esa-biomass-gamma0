@@ -8,13 +8,12 @@ import pytest
 
 @pytest.fixture
 def staged_paths(tmp_path: Path) -> dict[str, Path]:
-    """Create the five readable paths required by the staged-source boundary."""
+    """Create the four readable paths required by the staged-source boundary."""
     paths = {
         "source_item": tmp_path / "source-item.json",
         "beta0_tiff": tmp_path / "beta0.tif",
         "radiometry_lut": tmp_path / "radiometry.nc",
         "annotation_xml": tmp_path / "annotation.xml",
-        "study_tiles": tmp_path / "study-tiles.gpkg",
     }
     for path in paths.values():
         path.write_bytes(b"staged input")

@@ -17,7 +17,7 @@ or architectural decision.
   authenticate and cache source assets for local testing, validates physical LUT
   alignment, and writes GCP-referenced diagnostic COGs.
 - Production code receives staged local paths for a source STAC Item JSON,
-  Beta0 TIFF, radiometry LUT NetCDF, annotation XML, and study-tiles vector. It
+  Beta0 TIFF, radiometry LUT NetCDF, and annotation XML. It
   must not authenticate, search STAC, download assets, or make HTTP requests.
 - Native-grid diagnostics are not production assets. Do not advertise them as a
   tile collection, stack them with fixed-grid products, or use them in temporal
@@ -27,13 +27,13 @@ or architectural decision.
 
 ## Required processing workflow
 
-1. Validate the staged source Item and five local inputs. Require the Item's
+1. Validate the staged source Item and four local inputs. Require the Item's
    `enclosure_tiff`, `enclosure_nc`, and `enclosure_annot_xml` assets; retain
    source ID, collection, time, bbox, self link, and asset URLs after stripping
    user info, query parameters, and fragments.
 2. Use the source WGS84 bbox to enumerate candidate standard 100 km MGRS tiles.
-   Use the staged study geometry only to filter candidates. `mgrs` remains the
-   source for tile IDs, UTM CRS, hemisphere, and exact 100,000 m bounds. Reject
+   `mgrs` remains the source for tile IDs, UTM CRS, hemisphere, and exact
+   100,000 m bounds. Reject
    antimeridian and polar bboxes in this UTM-only release.
 3. Create each exact north-up `4000 × 4000` target grid at 25 m. Densify the
    tile perimeter, transform it to the Beta0 GCP CRS, and back-project it with a
@@ -121,9 +121,9 @@ main.py                           # retained diagnostic reference
 Do not duplicate processing logic across `run.sh`, `run.py`, CWL, notebooks, or
 `main.py`. Shell and CWL files adapt runtime inputs only; package Python owns
 the workflow. `algorithm.yml`, CWL, shell wrappers, and the CLI use
-`source_item`, `beta0_tiff`, `radiometry_lut`, `annotation_xml`, `study_tiles`,
-`resolution` (fixed to 25 m), and `overwrite` with matching defaults. The five
-path inputs stage as OGC `File` values. `run.py` receives local paths. CWL
+`source_item`, `beta0_tiff`, `radiometry_lut`, `annotation_xml`, `resolution`
+(fixed to 25 m), and `overwrite` with matching defaults. The four path inputs
+stage as OGC `File` values. `run.py` receives local paths. CWL
 returns `./output` as a `Directory` and disables network access.
 
 `pyproject.toml` and `uv.lock` are the sole production dependency definition and
@@ -133,8 +133,8 @@ or a bespoke execution framework.
 
 ## Guardrails
 
-- The source bbox and study geometry filter candidates only. Exact GCP
-  back-projection determines coverage.
+- The source bbox filters candidates only. Exact GCP back-projection determines
+  coverage.
 - Never derive MGRS geometry from parsed IDs, hard-coded extents, or an
   approximate fishnet. Never use a study-tile index as authoritative MGRS
   geometry.
@@ -159,7 +159,7 @@ or a bespoke execution framework.
 Keep deterministic tests for:
 
 - staged-source validation, including source identity, time, bbox, required
-  asset entries, five readable files, URL sanitization, and no-network behavior;
+  asset entries, four readable files, URL sanitization, and no-network behavior;
 - MGRS target-grid CRS, bounds, transform, and `4000 × 4000` shape in both
   hemispheres, including candidate and study-geometry filtering;
 - GCP boundary back-projection, padding, clipping, rejection, and local-GCP

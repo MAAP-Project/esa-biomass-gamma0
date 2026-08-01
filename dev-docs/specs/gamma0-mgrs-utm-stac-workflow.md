@@ -13,7 +13,7 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 - Use the tile's UTM CRS and a deterministic `4000 × 4000` grid at 25 m.
 - Create one STAC Item per `(source granule, MGRS tile)` pair, plus a local Catalog and Collection.
 - Retain acquisition time, projection details, nodata semantics, processing metadata, and sanitized source provenance.
-- Receive a source STAC Item JSON, Beta0 TIFF, radiometry NetCDF, annotation XML, and study-tiles vector as staged local inputs. The production package makes no network requests.
+- Receive a source STAC Item JSON, Beta0 TIFF, radiometry NetCDF, and annotation XML as staged local inputs. The production package makes no network requests.
 
 ## Non-goals
 
@@ -29,7 +29,7 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 - `mgrs` derives each standard 100 km tile's ID, UTM CRS, hemisphere, and exact 100,000 m bounds. Code must not parse tile IDs or use an approximate fishnet as authoritative geometry.
 - The output grid has shape `[4000, 4000]`.
 - The input Beta0 TIFF has GCP geolocation. Its GCP transformer maps densified map-space tile boundaries to radar pixels and warped window data to UTM.
-- The source STAC bbox and study geometry filter candidates only. GCP overlap determines whether a tile has coverage.
+- The source STAC bbox filters candidates only. GCP overlap determines whether a tile has coverage.
 - Gamma0 is linear intensity: `Beta0_amplitude² × gammaNought`. It is not dB.
 - Processing arrays use `NaN` for missing values. Written COGs use `-9999.0` as `float32` nodata.
 - A source granule may yield no accepted tiles. That run still writes a valid empty Catalog and Collection.
@@ -37,13 +37,12 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 ## Architecture Overview
 
 ```text
-upstream orchestration: study AOI + date range
-  -> MAAP STAC search for BIOMASS L1B source Items
-  -> stage source Item JSON + Beta0 TIFF + LUT NetCDF + annotation XML + study vector
+upstream orchestration: select one BIOMASS L1B source Item
+  -> stage source Item JSON + Beta0 TIFF + LUT NetCDF + annotation XML
   -> DPS run (local staged paths only)
        -> validate source metadata and staged files
        -> read Beta0 header and GCPs
-       -> find source-bbox candidates constrained by study geometry
+       -> find source-bbox candidates
        -> for each source-item × MGRS-tile pair
             -> densify tile boundary; map it to a padded Beta0 pixel window
             -> range-read the four-band Beta0 window
@@ -61,9 +60,9 @@ The package must not build a virtual stack from radar-geometry data. Consumers m
 
 ### 1. Stage one source granule
 
-1. Upstream orchestration searches MAAP STAC for its selected study area and date range, then submits one job per selected `BiomassLevel1b` Item.
-2. The job stages the source Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), `enclosure_annot_xml` (annotation), and the study-tiles vector as OGC `File` inputs.
-3. The package validates the source ID, acquisition datetime, horizontal bbox, required Item asset entries, study geometry, and readable regular staged files. It rejects antimeridian and polar bboxes for this UTM-only release.
+1. Upstream orchestration selects a `BiomassLevel1b` Item and submits one job for it.
+2. The job stages the source Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), and `enclosure_annot_xml` (annotation) as OGC `File` inputs.
+3. The package validates the source ID, acquisition datetime, horizontal bbox, required Item asset entries, and readable regular staged files. It rejects antimeridian and polar bboxes for this UTM-only release.
 4. The package retains source ID, collection, time, Item self link, and required asset URLs as provenance after removing URL user info, query parameters, and fragments. It never retain or log signed URLs or credentials.
 5. The package opens staged files directly. It performs no token exchange, STAC search, HTTP request, cache management, or download.
 
@@ -71,13 +70,13 @@ For local development, `main.py` may authenticate and use its cache/download hel
 
 ### 2. Select MGRS output tiles
 
-1. Use `mgrs` to enumerate standard 100 km MGRS tiles in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox and staged study geometry.
+1. Use `mgrs` to enumerate standard 100 km MGRS tiles in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox.
 2. Derive each retained tile's UTM zone, hemisphere, EPSG code, and exact 100 km bounds through `MGRSToUTM`.
 3. Open the staged Beta0 TIFF and obtain its GCPs and GCP CRS.
 4. For each candidate, densify the tile perimeter in the tile UTM CRS, transform it to the GCP CRS, then use GDAL's GCP transformer to back-project it to Beta0 pixel coordinates.
 5. Pad the resulting radar window, clip it to the source raster, and skip the tile when the result is empty, non-finite, or outside the source coverage.
 
-The source bbox and study geometry reduce work. The GCP-derived overlap check remains authoritative.
+The source bbox reduces work. The GCP-derived overlap check remains authoritative.
 
 ### 3. Read and calibrate a source window
 
@@ -226,7 +225,6 @@ process-gamma0 \
   --beta0-tiff path/to/enclosure.tif \
   --radiometry-lut path/to/enclosure.nc \
   --annotation-xml path/to/annotation.xml \
-  --study-tiles path/to/boreal_tiles.gpkg \
   --output-root output/ \
   --resolution 25 \
   --overwrite
@@ -238,20 +236,19 @@ process-gamma0 \
 | `beta0_tiff` | Staged `enclosure_tiff` file |
 | `radiometry_lut` | Staged `enclosure_nc` file |
 | `annotation_xml` | Staged `enclosure_annot_xml` file |
-| `study_tiles` | Staged vector geometry that filters candidate MGRS tiles |
 | `output_root` | Output directory, fixed to `./output` by the DPS wrapper |
 | `resolution` | Fixed at `25` for this release |
 | `overwrite` | Rebuild an otherwise complete tile product |
 | `window_padding_pixels` | Internal radar-window safety margin for scientific tuning |
 | `processing_version` | Installed package version stored in COG and STAC metadata |
 
-`algorithm.yml`, CWL, `run.sh`, `run.py`, and the package CLI expose the same five staged `File` inputs and matching defaults for `resolution` and `overwrite`. CWL disables network access and returns `./output` as a `Directory`.
+`algorithm.yml`, CWL, `run.sh`, `run.py`, and the package CLI expose the same four staged `File` inputs and matching defaults for `resolution` and `overwrite`. CWL disables network access and returns `./output` as a `Directory`.
 
 `build.sh` installs the frozen production environment with `uv sync --frozen --no-dev`. `run.sh` creates `./output` and forwards staged paths through `uv run --frozen --no-dev`. `pyproject.toml` and `uv.lock` remain the only dependency definition and lock. Production dependencies belong in `[project.dependencies]`; notebook, authenticated-staging, plotting, and test dependencies belong in development groups where possible.
 
 ## Failure Handling and Idempotency
 
-- Fail the source run for missing or invalid staged inputs, source metadata, study geometry, GCPs, LUT coordinates, annotation values, or acquisition time.
+- Fail the source run for missing or invalid staged inputs, source metadata, GCPs, LUT coordinates, annotation values, or acquisition time.
 - Skip and log a candidate when GCP back-projection finds no overlap or a scientific warp is all nodata.
 - Stage a leaf product in a sibling temporary directory. Promote it only after nine COGs, the thumbnail, and `item.json` validate.
 - Treat an existing valid Item with all required local assets as complete unless `--overwrite` is set.
@@ -263,8 +260,8 @@ process-gamma0 \
 
 ### Deterministic tests
 
-- Staged-input validation covers source identity, time, bbox normalization, required assets, five readable local files, provenance sanitization, antimeridian/polar rejection, and no-network behavior.
-- MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries; study geometry filters candidates without defining MGRS bounds.
+- Staged-input validation covers source identity, time, bbox normalization, required assets, four readable local files, provenance sanitization, antimeridian/polar rejection, and no-network behavior.
+- MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries using only the source bbox.
 - Synthetic GCP tests cover boundary densification, acceptance, rejection, padding, clipping, non-finite mappings, and local-GCP shifting.
 - Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
 - Raster tests use real temporary files to validate direct warps, nine single-band COGs, thumbnail structure, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.

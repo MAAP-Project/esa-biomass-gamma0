@@ -9,7 +9,6 @@ description = "Create fixed-grid Gamma0 products from staged ESA BIOMASS L1B dat
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "geopandas>=1.1.4",
     "mgrs>=1.5.4",
     "netcdf4>=1.7.4",
     "pystac>=1.15.2",

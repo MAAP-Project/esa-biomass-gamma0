@@ -32,7 +32,6 @@ class StagedSource:
     beta0_tiff: Path
     radiometry_lut: Path
     annotation_xml: Path
-    study_tiles: Path
 
 
 def sanitize_href(href: str) -> str:
@@ -47,15 +46,13 @@ def validate_staged_source(
     beta0_tiff: Path,
     radiometry_lut: Path,
     annotation_xml: Path,
-    study_tiles: Path,
 ) -> StagedSource:
-    """Validate one staged source Item and its five local regular-file inputs."""
+    """Validate one staged source Item and its four local regular-file inputs."""
     paths = {
         "source_item": Path(source_item),
         "beta0_tiff": Path(beta0_tiff),
         "radiometry_lut": Path(radiometry_lut),
         "annotation_xml": Path(annotation_xml),
-        "study_tiles": Path(study_tiles),
     }
     for name, path in paths.items():
         _require_readable_file(name, path)
