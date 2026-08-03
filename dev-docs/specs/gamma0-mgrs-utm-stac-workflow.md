@@ -66,11 +66,11 @@ The package must not build a virtual stack from radar-geometry data. Consumers m
 4. The package retains source ID, collection, time, Item self link, and required asset URLs as provenance after removing URL user info, query parameters, and fragments. It never retain or log signed URLs or credentials.
 5. The package opens staged files directly. It performs no token exchange, STAC search, HTTP request, cache management, or download.
 
-For local development, `main.py` may authenticate and use its cache/download helpers to materialize the source Item and three granule assets. The production workflow receives those four staged local files and does not accept an AOI or study-vector input.
+For local development, `stage-and-process-gamma0 <item-id>` authenticates and materializes a sanitized source Item plus three granule assets in a persistent cache before delegating to `process-gamma0`; `main.py` reuses that staging path for native-grid diagnostics. The production workflow receives only the four staged local files and does not accept an AOI or study-vector input.
 
 ### 2. Select MGRS output tiles
 
-1. Use `mgrs` to enumerate standard 100 km MGRS tiles in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox.
+1. Use `mgrs` to enumerate standard 100 km MGRS tiles only in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox; do not probe neighboring zones.
 2. Derive each retained tile's UTM zone, hemisphere, EPSG code, and exact 100 km bounds through `MGRSToUTM`.
 3. Open the staged Beta0 TIFF and obtain its GCPs and GCP CRS.
 4. For each candidate, densify the tile perimeter in the tile UTM CRS, transform it to the GCP CRS, then use GDAL's GCP transformer to back-project it to Beta0 pixel coordinates.
@@ -150,11 +150,15 @@ Create a self-contained local Catalog rooted at `<output-root>/catalog.json` and
 id: biomass-gamma0-mgrs-25m
 ```
 
-After every run, scan nested output directories for valid Items with their required nine COGs and thumbnail. Rebuild Catalog links and Collection spatial and temporal extents from those valid leaf products, then atomically replace root STAC files. This recovers a complete product after an interrupted Catalog update.
+After every run, scan nested output directories for valid Items with their required nine COGs and thumbnail. Rebuild Catalog links and Collection temporal extent from those valid leaf products, and set the Collection spatial extent to their single enclosing WGS84 bbox, then atomically replace root STAC files. This recovers a complete product after an interrupted Catalog update.
 
 When no Item exists, write a valid empty Catalog and Collection with global spatial extent and open temporal extent. Replace those conservative extents when Items exist.
 
-Validate Catalog, Collection, and Items with PySTAC before reporting success. Use the Projection, Raster, and SAR extensions where fields are populated. Collection and Item `stac_extensions` list the exact schema URLs used by the installed PySTAC version.
+The Collection's standard `item_assets` metadata defines the same nine scientific assets and thumbnail as every Item. Each definition has a readable polarization-specific title, media type, and roles so STAC browsers can distinguish the four Beta0 and four Gamma0 assets. Per-Item projection, raster, and SAR fields remain on the Item assets.
+
+The Collection also uses the Render extension to provide display-only `beta0-rgb` and `gamma0-rgb` HH/HV/VV composites. Their per-channel `rescale` ranges are respectively `[[0.1, 1.0], [0.025, 0.42], [0.12, 0.8]]` and `[[0.005, 0.5], [0.0003, 0.09], [0.007, 0.3]]`, with `-9999.0` nodata. These rounded ranges came from 2nd-to-98th percentile overview samples across the local 636-tile validation set. They are visualization defaults only and do not transform the scientific assets.
+
+Validate Catalog, Collection, and Items with PySTAC before reporting success. Use the Projection, Raster, SAR, and Render extensions where fields are populated. Collection and Item `stac_extensions` list the exact schema URLs used by the installed PySTAC version.
 
 ### Item identity and geometry
 
@@ -242,7 +246,20 @@ process-gamma0 \
 
 `algorithm.yml` and CWL expose the four staged inputs as `File` values with matching defaults for `resolution` and `overwrite`. `run.sh`, `run.py`, and the `process-gamma0` package CLI accept the same local path names; the DPS wrapper fixes `output_root` to `./output`. CWL disables network access and returns `./output` as a `Directory`.
 
-`build.sh` installs the frozen production environment with `uv sync --frozen --no-dev`. `run.sh` creates `./output` and forwards staged paths through `uv run --frozen --no-dev`. `pyproject.toml` and `uv.lock` remain the only dependency definition and lock. Production dependencies belong in `[project.dependencies]`; notebook, authenticated-staging, plotting, and test dependencies belong in development groups where possible.
+`build.sh` installs the frozen production environment with `uv sync --frozen --no-dev`. `run.sh` creates `./output` and forwards staged paths through `uv run --frozen --no-dev`. `stage-and-process-gamma0` is a development-only command that uses the authenticated staging dependencies before calling the same production CLI. `pyproject.toml` and `uv.lock` remain the only dependency definition and lock. Production dependencies belong in `[project.dependencies]`; notebook, authenticated-staging, plotting, and test dependencies belong in development groups where possible.
+
+### Local eoAPI integration
+
+The repository's development-only `docker-compose.yml` runs PgSTAC, STAC API,
+TiTiler, and STAC Browser on the standard eoAPI ports. It mounts the local
+output root read-only into TiTiler at `/data/gamma0`; `GAMMA0_OUTPUT_ROOT`
+overrides the default `./output` host path.
+
+`scripts/load_pgstac.py` loads the root Collection and the Item links it
+registers. At load time only, it maps each relative local asset HREF to a
+`file:///data/gamma0/...` URI. The generated Item, Collection, and Catalog
+files retain relative asset HREFs and remain portable outside Docker. Use the
+`pypgstac[psycopg]==0.9.11` extra to match the bundled PgSTAC image.
 
 ## Failure Handling and Idempotency
 
@@ -294,7 +311,7 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | Display asset | One RGB thumbnail outside the scientific raster contract | It supports browsing without changing the COG data model. |
 | Geocoding | Direct local-window warp per scientific output | This avoids intermediate GCP COGs and gives each output one controlled interpolation. |
 | Resampling | Bilinear | The workflow controls a single documented interpolation step. |
-| MGRS geometry | `mgrs` round-trip filtered only by source bbox | `mgrs` owns IDs, zones, hemispheres, and bounds; GCP overlap determines coverage without an AOI input. |
+| MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while GCP overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environment from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution. |
 | Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |

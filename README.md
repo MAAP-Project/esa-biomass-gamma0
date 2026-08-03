@@ -1,62 +1,172 @@
 # ESA BIOMASS Gamma0 MGRS DPS
 
-A MAAP DPS/OGC Application Package in development for staged ESA BIOMASS
-Level-1B products. Each accepted source-granule × 100 km MGRS-tile pair will
-produce four Beta0 COGs, four linear-Gamma0 COGs, one resampled GammaNought
-COG, one display-only RGB thumbnail, and a STAC Item on a fixed native-UTM grid.
+Create fixed-grid 25 m MGRS Beta0 and linear Gamma0 products from a staged ESA
+BIOMASS Level-1B granule.
 
-[`dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md`](dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md)
-defines the product contract. The active package plan lives in
-[`dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md`](dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md).
+## About
 
-## Status
+This MAAP DPS algorithm converts the four-polarization Beta0 amplitudes in one
+ESA BIOMASS L1B product into analysis-ready products on every overlapping
+standard 100 km MGRS tile in a UTM zone intersecting the source bbox. For each
+tile, it:
 
-The repository is moving from a calibration diagnostic to the production tile
-product:
+1. Reads the staged source STAC Item, Beta0 TIFF, radiometry LUT, and annotation XML.
+2. Samples the GammaNought LUT in radar geometry and calculates linear Gamma0
+   as `Beta0² × GammaNought`.
+3. Warps four Beta0 polarizations, four Gamma0 polarizations, and GammaNought
+   directly onto an exact 4,000 × 4,000 pixel, 25 m UTM tile grid.
+4. Writes nine Cloud Optimized GeoTIFFs, a display-only RGB thumbnail, and STAC
+   metadata.
 
-- `main.py` is the current diagnostic reference. It can download one L1B Item
-  for local testing, align the radiometry LUT in radar geometry, calculate
-  Gamma0, and write native-grid GCP-referenced COGs.
-- `src/esa_biomass_gamma0/` is installable and provides local-only
-  staged-source validation, MGRS target-grid/GCP-window helpers, windowed
-  physical-coordinate calibration, direct-warp/COG/thumbnail helpers, and a
-  sequential staged-source workflow that atomically promotes complete products
-  and rebuilds local STAC metadata. Its `process-gamma0` CLI accepts a source
-  Item JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML as local
-  paths; it does not retrieve source assets.
-- `algorithm.yml`, `esa-biomass-gamma0.cwl`, `build.sh`, and `run.sh` package
-  that CLI for MAAP without network access or credentials. Native-GCP
-  diagnostics are not analysis-ready tile products and must not join the
-  production collection.
+Source discovery and download happen before the job is submitted. The DPS
+stages the four file inputs; the algorithm does not authenticate, search STAC,
+or make network requests.
 
-## Product contract
+## Usage
 
-For each accepted source Item and intersecting standard 100 km MGRS tile, the
-production package will:
+Submit one job for each source granule after staging its STAC Item and required
+assets somewhere the DPS can read, such as your MAAP workspace S3 bucket.
+Assuming the algorithm is registered as `esa_biomass_gamma0` version `v0.1.0`:
 
-1. Validate four staged local inputs. The source Item supplies identity,
-   acquisition time, bbox, and sanitized provenance.
-2. Use the source bbox only to filter MGRS candidates. Densified tile-boundary
-   back-projection through the Beta0 GCP transformer
-   determines coverage.
-3. Read a padded local Beta0 window, sample only the required LUT region in
-   radar coordinates, and calculate `Gamma0 = Beta0_amplitude² × gammaNought`.
-4. Warp four Beta0 polarizations, four Gamma0 polarizations, and resampled
-   GammaNought directly to the tile's exact north-up `4000 × 4000`, 25 m UTM
-   grid. Each scientific output gets one bilinear interpolation.
-5. Validate nine single-band `float32` COGs and an RGB thumbnail, write the
-   STAC Item, atomically promote the product, then rebuild local STAC metadata
-   from valid nested Items.
+```python
+from maap.maap import MAAP
 
-Source discovery, authentication, and remote asset retrieval happen upstream.
-An orchestrator can search MAAP STAC and submit one staged input set per L1B
-Item. The production package and CWL runtime have no network access or MAAP
-credentials.
+maap = MAAP()
+job = maap.submitJob(
+    identifier="biomass-gamma0-example",
+    algo_id="esa_biomass_gamma0",
+    version="v0.1.0",
+    queue="maap-dps-worker-8gb",
+    source_item="s3://<bucket>/source-item.json",
+    beta0_tiff="s3://<bucket>/enclosure.tif",
+    radiometry_lut="s3://<bucket>/enclosure.nc",
+    annotation_xml="s3://<bucket>/annotation.xml",
+    resolution=25,
+    overwrite=False,
+)
+print(job.id)
+```
 
-### Output layout
+Use a queue available to your MAAP organization that meets the algorithm's 8 GB
+memory and four-core requirement. The job runs asynchronously; use the MAAP
+Jobs UI or `job.retrieve_attributes()` to monitor it.
+
+### Local CLI
+
+For local development, provide the same four inputs as local files. The CLI
+creates the output directory and does not download source assets:
+
+```bash
+uv sync --frozen
+uv run --frozen --no-dev process-gamma0 \
+  --source-item path/to/source-item.json \
+  --beta0-tiff path/to/enclosure.tif \
+  --radiometry-lut path/to/enclosure.nc \
+  --annotation-xml path/to/annotation.xml \
+  --output-root ./output
+```
+
+Pass `--overwrite` to rebuild complete existing tile products.
+
+### Local Item-ID runs
+
+`stage-and-process-gamma0` is a development-only adapter: it searches MAAP,
+downloads an Item's three source assets into `/tmp/esa-biomass-gamma0/`, writes a
+sanitized source Item there, and delegates to the unchanged staged workflow.
+A complete cache is reusable offline; use `--refresh` to stage the Item and
+assets again.
+
+First, query the MAAP STAC API for candidate IDs in an AOI. Replace the example
+WGS84 bbox with your AOI:
+
+```bash
+uv run python - <<'PY' > /tmp/item-ids.txt
+import logging
+from pystac_client import Client
+
+logger = logging.getLogger("esa-biomass-gamma0")
+
+search = Client.open("https://catalog.maap.eo.esa.int/catalogue/").search(
+    collections=["BiomassLevel1b"],
+    bbox=[25, 62, 26, 63],
+    max_items=10,
+    sortby="-datetime",
+)
+
+items = list(search.items())
+logger.info(f"found {len(items)} items")
+
+for item in search.items():
+    print(item.id)
+PY
+```
+
+Set local MAAP credentials, then process the discovered IDs sequentially into
+the shared `./output/` Catalog and Collection:
+
+```bash
+export ESA_MAAP_CLIENT_SECRET=...
+export ESA_OFFLINE_TOKEN=...
+
+while IFS= read -r item_id; do
+  uv run stage-and-process-gamma0 "$item_id"
+done < /tmp/item-ids.txt
+```
+
+For one Item, run `uv run stage-and-process-gamma0 <item-id>`. Pass
+`--output-root <directory>` to use a different output root, `--overwrite` to
+rebuild existing products, or `--refresh` to refresh its staged source files.
+
+### Browse a local output root with eoAPI
+
+Each run rebuilds the root `catalog.json` and `collection.json` from every valid
+nested Item in its output root; the Collection spatial extent is their single
+enclosing WGS84 bounding box. The local Compose stack runs PgSTAC, STAC API,
+TiTiler, TiPG, and STAC Browser on the usual eoAPI ports. It mounts `./output`
+read-only into TiTiler at
+`/data/gamma0`. TiPG exposes the loaded PgSTAC Items as the
+`pgstac.items` feature collection.
+
+```bash
+docker compose up --build -d
+
+export PGHOST=127.0.0.1
+export PGPORT=5439
+export PGDATABASE=postgis
+export PGUSER=username
+export PGPASSWORD=password
+
+uv run --with 'pypgstac[psycopg]==0.9.11' python scripts/load_pgstac.py ./output \
+  --asset-root /data/gamma0
+```
+
+Open the STAC API at <http://localhost:8081>, TiTiler at
+<http://localhost:8082>, TiPG at <http://localhost:8083/collections/pgstac.items>,
+and STAC Browser at <http://localhost:8085>. The loader upserts the Collection
+and its registered Items, so rerun it after adding local products.
+
+Set `GAMMA0_OUTPUT_ROOT=/absolute/path/to/output` before `docker compose up` to
+mount a different output root. The loader maps its relative COG and thumbnail
+HREFs to `file:///data/gamma0/...` only in the database copy; generated STAC
+files remain portable. `pypgstac` is fetched only for this command and is not
+part of the DPS runtime; its version matches the bundled PgSTAC database.
+
+## Parameters
+
+- `source_item`: Source STAC Item JSON. It must reference `enclosure_tiff`,
+  `enclosure_nc`, and `enclosure_annot_xml` assets.
+- `beta0_tiff`: Four-band Beta0 `enclosure_tiff` asset.
+- `radiometry_lut`: Radiometry `enclosure_nc` NetCDF asset.
+- `annotation_xml`: `enclosure_annot_xml` asset.
+- `resolution`: Output resolution in metres. Only `25` is accepted.
+- `overwrite`: Rebuild an existing complete source-granule and MGRS-tile product.
+
+## Output
+
+Each accepted source granule and MGRS tile produces:
 
 ```text
-<output-root>/<mgrs-tile>/<acquisition-date>/<source-item-id>/
+<tile>/<acquisition-date>/<source-item-id>/
   beta0_hh.tif
   beta0_hv.tif
   beta0_vh.tif
@@ -68,123 +178,15 @@ credentials.
   gamma_nought.tif
   thumbnail.png
   item.json
-<output-root>/catalog.json
-<output-root>/collection.json
 ```
 
-Scientific COGs use `NaN` during calculation, `-9999.0` final nodata, DEFLATE
-compression, 512-pixel blocks, and the MGRS-derived UTM CRS and affine transform.
-Gamma0 assets contain linear intensity, never dB. The thumbnail is display-only;
-it does not replace a scientific asset.
+The job also writes `catalog.json` and `collection.json` at the output root.
+Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
+Gamma0 is linear intensity, not dB. The Collection's `item_assets` metadata
+provides descriptive polarization-specific titles, media types, and roles for
+all ten assets. It also provides `beta0-rgb` and `gamma0-rgb` Render-extension
+presets for HH/HV/VV composites, using fixed 2nd-to-98th percentile stretches
+sampled from the local validation products.
 
-Items use `gamma0-<source-item-id>-<mgrs-tile-id>` in the
-`biomass-gamma0-mgrs-25m` Collection. They retain source, projection, raster,
-SAR, MGRS, and processing provenance metadata. A source with no accepted tile
-still produces a valid empty Catalog and Collection.
-
-## Package layout
-
-```text
-algorithm.yml                    # MAAP algorithm metadata, resources, and inputs
-build.sh                          # install frozen uv production environment
-esa-biomass-gamma0.cwl           # OGC Application Package / CWL wrapper
-run.sh                            # creates ./output and forwards staged paths
-run.py                            # thin package CLI adapter; no processing logic
-src/esa_biomass_gamma0/          # source validation, grids, calibration, raster, STAC, workflow
-tests/                            # deterministic synthetic tests
-main.py                           # retained native-grid diagnostic reference
-```
-
-The package owns the processing workflow. `run.py`, `run.sh`, CWL, notebooks,
-and `main.py` adapt inputs or provide diagnostics; they do not copy production
-processing logic.
-
-## DPS interface
-
-| Input | Type | Meaning |
-| --- | --- | --- |
-| `source_item` | File | Staged source STAC Item JSON. |
-| `beta0_tiff` | File | Staged `enclosure_tiff` asset. |
-| `radiometry_lut` | File | Staged `enclosure_nc` asset. |
-| `annotation_xml` | File | Staged `enclosure_annot_xml` asset. |
-| `resolution` | number | Resolution in metres. Version 1 accepts only `25`. |
-| `overwrite` | boolean | Rebuild a valid existing source-Item × tile product. |
-
-`algorithm.yml`, CWL, shell wrappers, and the CLI use these names and matching
-defaults. The four paths stage as CWL `File` values. CWL returns `./output` as a
-`Directory`.
-
-## Development
-
-The project uses `uv`. `pyproject.toml` and `uv.lock` provide the only runtime
-dependency definition and lock.
-
-```bash
-uv sync --frozen
-uv run --frozen --no-dev process-gamma0 \
-  --source-item path/to/source-item.json \
-  --beta0-tiff path/to/enclosure.tif \
-  --radiometry-lut path/to/enclosure.nc \
-  --annotation-xml path/to/annotation.xml \
-  --output-root output
-```
-
-`run.py` invokes the same CLI. The MAAP wrappers fix the output root to
-`./output`:
-
-```bash
-./build.sh
-./run.sh --source-item path/to/source-item.json --beta0-tiff path/to/enclosure.tif \
-  --radiometry-lut path/to/enclosure.nc --annotation-xml path/to/annotation.xml
-```
-
-An empty source result is successful and still writes `output/catalog.json` and
-`output/collection.json` with global spatial and open temporal extents.
-
-The current diagnostic can materialize local test inputs with `main.py`'s
-`fetch_assets`, `cache_paths`, and `write_cached_asset` helpers. Supply MAAP
-credentials outside version control:
-
-```bash
-export ESA_MAAP_CLIENT_SECRET=...
-export ESA_OFFLINE_TOKEN=...
-uv run python main.py '<stac-item-id>' --out-dir diagnostics
-```
-
-The diagnostic caches assets in `/tmp` by default; pass `--cache-dir` to use a
-persistent cache. It writes `beta0.tif`, `lut_native.tif`, `lut_resampled.tif`,
-and `gamma0.tif` in native GCP-referenced radar geometry. Those files serve
-scientific validation and are not production tile products.
-
-The production runner receives staged files and needs no MAAP credentials. Do
-not place credentials or signed source URLs in metadata, logs, STAC JSON, or
-committed configuration.
-
-## Non-negotiable processing rules
-
-- Derive MGRS IDs, UTM zones, and exact bounds through `mgrs`; do not parse IDs,
-  use a hard-coded fishnet, or rely on source-bbox approximations for tile extents.
-- Calibrate in radar geometry before geocoding. A later GCP warp cannot repair
-  a LUT sampled at incorrect radar coordinates.
-- Preserve LUT axis order `(azimuth, range)`; do not transpose, flip, or stretch
-  the complete LUT across Beta0 pixels.
-- Do not write an intermediate GCP COG. Each scientific output gets one direct
-  bilinear warp to its fixed target grid.
-- Do not combine products from different UTM CRSs before each reaches its fixed
-  tile grid.
-- Validate nine COGs and the thumbnail before registering `item.json`. A valid
-  Item with all required assets is complete unless `--overwrite` is set.
-
-## Implementation milestones
-
-1. Establish the installable `src/esa_biomass_gamma0` package and deterministic
-   test foundation.
-2. Extract shared staged-input, physical-coordinate calibration, MGRS-grid, and
-   GCP-window helpers from the diagnostic and proof-of-concept paths.
-3. Build one sequential staged-source workflow with nine fixed-grid COGs, an RGB
-   thumbnail, atomic product promotion, and recoverable local STAC metadata.
-4. Add the uv-based DPS package files and validate the no-network CWL contract.
-5. Run MAAP-backed Gamma0 and positional validation before release promotion.
-
-See [`AGENTS.md`](AGENTS.md) for contributor guardrails and the workflow
-specification for detailed validation gates and open questions.
+For implementation details and validation requirements, see
+[`dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md`](dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md).

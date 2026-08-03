@@ -25,11 +25,11 @@ def test_target_grid_has_exact_northern_and_southern_utm_geometry() -> None:
     assert northern.transform.to_gdal() == (600_000.0, 25.0, 0.0, 5_100_000.0, 0.0, -25.0)
 
 
-def test_candidate_grids_are_derived_only_from_the_source_bbox() -> None:
-    """An AOI-agnostic run retains every MGRS candidate for the source bbox."""
+def test_candidate_grids_use_only_utm_zones_intersecting_the_source_bbox() -> None:
+    """An interior bbox cannot create products in neighboring UTM zones."""
     candidates = candidate_grids((10.4, 45.4, 10.6, 45.6))
 
-    assert candidates
+    assert {grid.tile_id for grid in candidates} == {"32TPR"}
     assert all(grid.shape == (4000, 4000) for grid in candidates)
     assert all(grid.crs.to_epsg() == grid.epsg for grid in candidates)
 
@@ -38,12 +38,19 @@ def test_candidate_grids_retain_zone_and_latitude_band_identifiers() -> None:
     """MGRS round-trips candidates at zone and latitude-band boundaries."""
     zone_boundary = candidate_grids((5.99, 45.4, 6.01, 45.6))
     latitude_band_boundary = candidate_grids((10.4, 47.9, 10.6, 47.95))
+    norway = candidate_grids((4.0, 59.5, 4.5, 60.5))
+    svalbard = candidate_grids((8.0, 72.5, 8.5, 73.5))
 
     assert {grid.tile_id for grid in zone_boundary} == {"31TGL", "32TKR"}
     assert {grid.epsg for grid in zone_boundary} == {32631, 32632}
     assert "32TPU" in {grid.tile_id for grid in latitude_band_boundary}
     assert "32UPU" not in {grid.tile_id for grid in latitude_band_boundary}
-    assert all(target_grid(grid.tile_id) == grid for grid in zone_boundary + latitude_band_boundary)
+    assert {grid.epsg for grid in norway} == {32632}
+    assert {grid.epsg for grid in svalbard} == {32631}
+    assert all(
+        target_grid(grid.tile_id) == grid
+        for grid in zone_boundary + latitude_band_boundary + norway + svalbard
+    )
 
 
 def test_back_projects_and_clips_a_gcp_window() -> None:

@@ -22,6 +22,7 @@ from pystac import (
 )
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterBand, RasterExtension
+from pystac.extensions.render import Render, RenderExtension
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 from rasterio.transform import Affine, GCPTransformer, array_bounds
@@ -36,10 +37,12 @@ from esa_biomass_gamma0.raster import (
 from esa_biomass_gamma0.source import StagedSource
 
 COLLECTION_ID = "biomass-gamma0-mgrs-25m"
+SCIENTIFIC_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
 SCIENTIFIC_ASSETS = {
     **{
         f"beta0_{polarization.lower()}": (
             "beta0_amplitude",
+            f"Beta0 {polarization} amplitude",
             polarization,
             ["data", "beta0"],
         )
@@ -48,14 +51,22 @@ SCIENTIFIC_ASSETS = {
     **{
         f"gamma0_{polarization.lower()}": (
             "gamma0_linear_intensity",
+            f"Linear Gamma0 {polarization} intensity",
             polarization,
             ["data", "gamma0"],
         )
         for polarization in POLARIZATIONS
     },
-    "gamma_nought": ("gamma_nought_calibration_factor", None, ["data", "calibration"]),
+    "gamma_nought": (
+        "gamma_nought_calibration_factor",
+        "GammaNought calibration factor",
+        None,
+        ["data", "calibration"],
+    ),
 }
 THUMBNAIL_KEY = "thumbnail"
+THUMBNAIL_TITLE = "Gamma0 RGB thumbnail"
+THUMBNAIL_ROLES = ["thumbnail", "overview"]
 
 
 def source_footprint(
@@ -123,15 +134,15 @@ def build_item(
         shape=list(grid.shape),
         transform=list(grid.transform)[:6],
     )
-    for key, (quantity, polarization, roles) in SCIENTIFIC_ASSETS.items():
+    for key, (quantity, title, polarization, roles) in SCIENTIFIC_ASSETS.items():
         path = directory / f"{key}.tif"
         if not path.is_file():
             raise ValueError(f"missing scientific asset: {path}")
         asset = Asset(
             href=path.name,
-            media_type="image/tiff; application=geotiff; profile=cloud-optimized",
+            media_type=SCIENTIFIC_MEDIA_TYPE,
             roles=roles,
-            title=quantity,
+            title=title,
         )
         item.add_asset(key, asset)
         ProjectionExtension.ext(asset).apply(
@@ -150,7 +161,10 @@ def build_item(
     item.add_asset(
         THUMBNAIL_KEY,
         Asset(
-            href=thumbnail.name, media_type="image/png", roles=["thumbnail", "overview"]
+            href=thumbnail.name,
+            media_type="image/png",
+            roles=THUMBNAIL_ROLES,
+            title=THUMBNAIL_TITLE,
         ),
     )
     if source.self_href:
@@ -183,8 +197,18 @@ def rebuild_catalog(output_root: Path) -> int:
     products = _discover_products(output_root)
     datetimes = [item.datetime for _, item in products]
     bboxes = [item.bbox for _, item in products]
+    spatial_bbox = (
+        [
+            min(bbox[0] for bbox in bboxes),
+            min(bbox[1] for bbox in bboxes),
+            max(bbox[2] for bbox in bboxes),
+            max(bbox[3] for bbox in bboxes),
+        ]
+        if bboxes
+        else [-180.0, -90.0, 180.0, 90.0]
+    )
     extent = Extent(
-        SpatialExtent(bboxes or [[-180.0, -90.0, 180.0, 90.0]]),
+        SpatialExtent([spatial_bbox]),
         TemporalExtent(
             [[min(datetimes), max(datetimes)]] if datetimes else [[None, None]]
         ),
@@ -193,6 +217,30 @@ def rebuild_catalog(output_root: Path) -> int:
         id=COLLECTION_ID,
         description="Fixed-grid 25 m ESA BIOMASS Beta0 and linear Gamma0 MGRS products.",
         extent=extent,
+    )
+    collection.item_assets = _item_assets()
+    RenderExtension.ext(collection, add_if_missing=True).apply(
+        {
+            "beta0-rgb": Render.create(
+                title="Beta0 HH/HV/VV RGB",
+                assets=["beta0_hh", "beta0_hv", "beta0_vv"],
+                rescale=[[0.1, 1.0], [0.025, 0.42], [0.12, 0.8]],
+                nodata=float(NODATA),
+            ),
+            "gamma0-rgb": Render.create(
+                title="Linear Gamma0 HH/HV/VV RGB",
+                assets=["gamma0_hh", "gamma0_hv", "gamma0_vv"],
+                rescale=[[0.005, 0.5], [0.0003, 0.09], [0.007, 0.3]],
+                nodata=float(NODATA),
+            ),
+            "gamma0-correction-factor": Render.create(
+                title="Gamma0 correction factor",
+                assets=["gamma_nought"],
+                rescale=[[0, 1]],
+                colormap_name="thermal",
+                nodata=float(NODATA),
+            ),
+        }
     )
     catalog = Catalog(
         id="biomass-gamma0-mgrs-25m-catalog",
@@ -252,7 +300,7 @@ def _validated_product(directory: Path) -> Item:
     processing_version = str(item.properties.get("maap:processing_version", ""))
     if not source_item_id or not processing_version:
         raise ValueError(f"invalid Item provenance: {item_path}")
-    for key, (quantity, polarization, _) in SCIENTIFIC_ASSETS.items():
+    for key, (quantity, _, polarization, _) in SCIENTIFIC_ASSETS.items():
         path = _local_asset_path(directory, item.assets[key].href)
         validate_scientific_cog(
             path,
@@ -264,6 +312,25 @@ def _validated_product(directory: Path) -> Item:
         )
     validate_thumbnail(_local_asset_path(directory, item.assets[THUMBNAIL_KEY].href))
     return item
+
+
+def _item_assets() -> dict[str, dict[str, Any]]:
+    """Return Collection item-asset definitions for every product asset."""
+    return {
+        **{
+            key: {
+                "title": title,
+                "type": SCIENTIFIC_MEDIA_TYPE,
+                "roles": roles,
+            }
+            for key, (_, title, _, roles) in SCIENTIFIC_ASSETS.items()
+        },
+        THUMBNAIL_KEY: {
+            "title": THUMBNAIL_TITLE,
+            "type": "image/png",
+            "roles": THUMBNAIL_ROLES,
+        },
+    }
 
 
 def _discover_products(output_root: Path) -> list[tuple[Path, Item]]:

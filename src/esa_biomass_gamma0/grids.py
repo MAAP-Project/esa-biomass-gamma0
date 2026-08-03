@@ -112,11 +112,9 @@ def shifted_gcps(
 def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
     west, south, east, north = bbox
     source_bounds = bbox
-    west_zone = max(1, math.floor((west + 180) / 6) + 1)
-    east_zone = min(60, math.floor((east + 180) / 6) + 1)
     hemispheres = ("S", "N") if south < 0 < north else (("S",) if north <= 0 else ("N",))
     tile_ids: set[str] = set()
-    for zone in range(max(1, west_zone - 1), min(60, east_zone + 1) + 1):
+    for zone in _intersecting_utm_zones(bbox):
         for hemisphere in hemispheres:
             epsg = (32600 if hemisphere == "N" else 32700) + zone
             to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
@@ -133,6 +131,19 @@ def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
                     if grid.epsg == epsg and _intersects(_wgs84_bounds(grid), source_bounds):
                         tile_ids.add(tile_id)
     return sorted(tile_ids)
+
+
+def _intersecting_utm_zones(bbox: tuple[float, float, float, float]) -> set[int]:
+    west, south, east, north = bbox
+    longitudes = {west, east, *range(math.ceil(west), math.floor(east) + 1)}
+    latitudes = {south, north, *range(math.ceil(south), math.floor(north) + 1)}
+    zones = set()
+    for longitude in longitudes:
+        for latitude in latitudes:
+            tile_id = MGRS_CONVERTER.toMGRS(latitude, longitude, MGRSPrecision=0)
+            zone, _, _, _ = MGRS_CONVERTER.MGRSToUTM(tile_id)
+            zones.add(zone)
+    return zones
 
 
 def _wgs84_bounds(grid: TileGrid) -> tuple[float, float, float, float]:
