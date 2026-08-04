@@ -198,7 +198,7 @@ def test_writes_and_validates_nine_shared_grid_cogs_and_rgb_thumbnail(
     assert set(paths) == {
         *(f"beta0_{polarization.lower()}" for polarization in POLARIZATIONS),
         *(f"gamma0_{polarization.lower()}" for polarization in POLARIZATIONS),
-        "gamma_nought",
+        "gamma0_lut",
     }
     assert thumbnail.exists()
     assert THUMBNAIL_POLARIZATIONS == ("HH", "HV", "VV")

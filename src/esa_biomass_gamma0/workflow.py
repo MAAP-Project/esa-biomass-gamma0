@@ -1,10 +1,10 @@
 """Sequential staged-source orchestration for Gamma0 MGRS products."""
 
-from dataclasses import dataclass
 import logging
-from pathlib import Path
 import shutil
 import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 from rasterio import open as open_raster
@@ -24,7 +24,6 @@ from esa_biomass_gamma0.calibration import (
     window_coordinates,
 )
 from esa_biomass_gamma0.grids import (
-    RESOLUTION_METERS,
     TileGrid,
     candidate_grids,
     gcp_pixel_window,
@@ -38,7 +37,6 @@ from esa_biomass_gamma0.raster import (
 from esa_biomass_gamma0.source import StagedSource, validate_staged_source
 from esa_biomass_gamma0.stac import (
     build_item,
-    is_complete_product,
     rebuild_catalog,
     source_footprint,
     write_item,
@@ -53,7 +51,6 @@ class WorkflowResult:
 
     candidates: int
     written: int
-    skipped_complete: int
     skipped_no_data: int
     failed: int
 
@@ -65,30 +62,30 @@ def process_source(
     annotation_xml: Path,
     output_root: Path,
     *,
-    resolution: float = RESOLUTION_METERS,
-    overwrite: bool = False,
     window_padding_pixels: int = 64,
     processing_version: str = __version__,
 ) -> WorkflowResult:
     """Process one local staged source into validated MGRS tile products and STAC."""
-    if resolution != RESOLUTION_METERS:
-        raise ValueError(f"resolution must be {RESOLUTION_METERS:g} m")
     if window_padding_pixels < 0:
         raise ValueError("window padding must be non-negative")
+
     source = validate_staged_source(
         source_item, beta0_tiff, radiometry_lut, annotation_xml
     )
+
     metadata = parse_annotation(source.annotation_xml)
     coordinates = read_lut_coordinates(source.radiometry_lut)
     output_root = Path(output_root)
 
-    written = skipped_complete = skipped_no_data = failed = 0
+    written = skipped_no_data = failed = 0
     with open_raster(source.beta0_tiff) as dataset:
         if dataset.count != 4:
             raise ValueError("Beta0 must contain exactly four polarizations")
+
         gcps, gcp_crs = dataset.gcps
         if not gcps or gcp_crs is None:
             raise ValueError("Beta0 is missing GCPs or a GCP CRS")
+
         grids = candidate_grids(source.bbox)
         for grid in grids:
             directory = (
@@ -97,9 +94,6 @@ def process_source(
                 / source.datetime.date().isoformat()
                 / source.item_id
             )
-            if not overwrite and is_complete_product(directory):
-                skipped_complete += 1
-                continue
             window = gcp_pixel_window(
                 grid,
                 gcps,
@@ -111,6 +105,7 @@ def process_source(
             if window is None:
                 skipped_no_data += 1
                 continue
+
             try:
                 product = _write_product(
                     directory,
@@ -128,15 +123,17 @@ def process_source(
                 failed += 1
                 logger.exception("failed Gamma0 tile product %s", grid.tile_id)
                 continue
+
             if product:
                 written += 1
             else:
                 skipped_no_data += 1
+
     rebuild_catalog(output_root)
+
     return WorkflowResult(
         candidates=len(grids),
         written=written,
-        skipped_complete=skipped_complete,
         skipped_no_data=skipped_no_data,
         failed=failed,
     )

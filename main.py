@@ -21,7 +21,7 @@ from esa_biomass_gamma0.calibration import (
     resample_gamma_nought,
     window_coordinates,
 )
-from esa_biomass_gamma0.development import stage_source
+from esa_biomass_gamma0.materialization import stage_source
 
 logger = logging.getLogger(__name__)
 

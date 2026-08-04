@@ -106,7 +106,7 @@ def _staged_source(
 def test_processes_and_recovers_one_complete_tile_product(
     tmp_path: Path, staged_paths: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A complete run writes assets once, skips them next time, and rebuilds STAC."""
+    """A complete run replaces assets on every run and rebuilds STAC."""
     from esa_biomass_gamma0 import workflow
 
     grid = _grid()
@@ -122,18 +122,11 @@ def test_processes_and_recovers_one_complete_tile_product(
     assert result.failed == 0
     assert is_complete_product(directory)
     assert (output_root / "catalog.json").is_file()
-    assert (output_root / "collection.json").is_file()
+    assert not (output_root / "collection.json").exists()
 
     repeated = process_source(**staged_paths, output_root=output_root)
-    assert repeated.written == 0
-    assert repeated.skipped_complete == 1
+    assert repeated.written == 1
     assert repeated.failed == 0
-
-    overwritten = process_source(
-        **staged_paths, output_root=output_root, overwrite=True
-    )
-    assert overwritten.written == 1
-    assert overwritten.failed == 0
     assert is_complete_product(directory)
 
 

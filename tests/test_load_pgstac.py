@@ -19,24 +19,23 @@ def _loader_module():
     return module
 
 
-def test_reads_only_items_registered_by_the_root_collection(tmp_path: Path) -> None:
-    """The loader uses one Collection's item links rather than an unsafe file scan."""
-    collection = tmp_path / "collection.json"
+def test_reads_only_items_registered_by_the_root_catalog(tmp_path: Path) -> None:
+    """The loader uses Catalog Item links rather than an unsafe file scan."""
+    catalog = tmp_path / "catalog.json"
     item = tmp_path / "32TNS" / "2026-01-02" / "source" / "item.json"
     ignored = tmp_path / ".temporary" / "item.json"
     item.parent.mkdir(parents=True)
     ignored.parent.mkdir()
     item.write_text("{}", encoding="utf-8")
     ignored.write_text("{}", encoding="utf-8")
-    collection.write_text(
+    catalog.write_text(
         '{"links": [{"rel": "item", "href": "32TNS/2026-01-02/source/item.json"}]}',
         encoding="utf-8",
     )
-    (tmp_path / "catalog.json").write_text("{}", encoding="utf-8")
 
     loader = _loader_module()
 
-    assert loader.input_paths(tmp_path) == (collection, [item])
+    assert loader.input_paths(tmp_path) == (catalog, [item])
 
 
 def test_maps_local_asset_hrefs_to_the_container_mount(tmp_path: Path) -> None:

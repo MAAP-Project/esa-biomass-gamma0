@@ -1,0 +1,20 @@
+algorithm_name: esa_biomass_gamma0_fetch
+algorithm_version: 0.1.0
+algorithm_description: >-
+  Fetch one ESA BIOMASS Level-1B source Item by ID, then create fixed-grid 25 m
+  MGRS Beta0 and linear Gamma0 products.
+code_repository: https://github.com/MAAP-Project/esa-biomass-gamma0
+run_command: esa-biomass-gamma0/dps/fetch/run.sh
+build_command: esa-biomass-gamma0/dps/fetch/build.sh
+ram_min: 8
+cores_min: 4
+base_container_url: mas.dit.maap-project.org/root/maap-workspaces/custom_images/maap_base:develop
+inputs:
+  - name: item_id
+    label: Source STAC Item ID
+    doc: BIOMASS Level-1B STAC Item ID to fetch inside the job.
+    type: string
+outputs:
+  - name: output
+    type: Directory
+outdir_max: 20

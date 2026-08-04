@@ -43,7 +43,9 @@ def _write_lut(
     with Dataset(path, "w") as dataset:
         dataset.createDimension("azimuth", len(azimuth))
         dataset.createDimension("range", len(slant_range))
-        azimuth_variable = dataset.createVariable("relativeAzimuthTimeRGC", "f8", ("azimuth",))
+        azimuth_variable = dataset.createVariable(
+            "relativeAzimuthTimeRGC", "f8", ("azimuth",)
+        )
         range_variable = dataset.createVariable("slantRangeTimeRGC", "f8", ("range",))
         azimuth_variable[:] = azimuth
         range_variable[:] = slant_range
@@ -55,7 +57,9 @@ def _write_lut(
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            gamma_nought[:, :] = values if gamma_dimensions == ("azimuth", "range") else values.T
+            gamma_nought[:, :] = (
+                values if gamma_dimensions == ("azimuth", "range") else values.T
+            )
 
 
 def test_samples_a_bracketed_lut_window_in_physical_coordinates(tmp_path: Path) -> None:

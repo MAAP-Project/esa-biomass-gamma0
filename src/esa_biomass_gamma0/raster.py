@@ -28,16 +28,20 @@ def warp_scientific_arrays(
     beta0, gamma0, gamma_nought = _validated_scientific_arrays(
         beta0, gamma0, gamma_nought
     )
+
     if not gcps:
         raise ValueError("Beta0 is missing GCPs")
+
     if gcp_crs is None:
         raise ValueError("Beta0 is missing a GCP CRS")
 
     warped_beta0 = _warp_stack(beta0, gcps, gcp_crs, grid)
     warped_gamma0 = _warp_stack(gamma0, gcps, gcp_crs, grid)
     warped_gamma_nought = _warp_array(gamma_nought, gcps, gcp_crs, grid)
+
     if not any(np.isfinite(array).any() for array in (warped_beta0, warped_gamma0)):
         return None
+
     return warped_beta0, warped_gamma0, warped_gamma_nought
 
 
@@ -54,11 +58,14 @@ def write_scientific_cogs(
     """Write and validate the nine single-band scientific COGs in a staged directory."""
     if not directory.is_dir():
         raise ValueError(f"staged tile directory does not exist: {directory}")
+
     if not source_item_id or not processing_version:
         raise ValueError("source item ID and processing version are required")
+
     beta0, gamma0, gamma_nought = _validated_scientific_arrays(
         beta0, gamma0, gamma_nought
     )
+
     if beta0.shape[-2:] != grid.shape:
         raise ValueError("scientific array shape does not match the target grid")
 
@@ -81,9 +88,11 @@ def write_scientific_cogs(
             )
             for index, polarization in enumerate(POLARIZATIONS)
         ),
-        ("gamma_nought", gamma_nought, "gamma_nought_calibration_factor", None),
+        ("gamma0_lut", gamma_nought, "gamma_nought_calibration_factor", None),
     ]
+
     paths: dict[str, Path] = {}
+
     for key, data, quantity, polarization in assets:
         path = directory / f"{key}.tif"
         _write_cog(
@@ -104,6 +113,7 @@ def write_scientific_cogs(
             processing_version=processing_version,
         )
         paths[key] = path
+
     return paths
 
 
@@ -136,6 +146,7 @@ def validate_scientific_cog(
             if dataset.tags(ns="IMAGE_STRUCTURE").get("LAYOUT") != "COG":
                 raise ValueError("GeoTIFF is not a COG")
             tags = dataset.tags()
+
     except (OSError, ValueError) as error:
         raise ValueError(
             f"scientific COG validation failed for {path}: {error}"
@@ -147,13 +158,16 @@ def validate_scientific_cog(
         "SOURCE_ITEM_ID": source_item_id,
         "PROCESSING_VERSION": processing_version,
     }
+
     if polarization is not None:
         expected_tags["POLARIZATION"] = polarization
+
     for name, value in expected_tags.items():
         if tags.get(name) != value:
             raise ValueError(
                 f"scientific COG validation failed for {path}: missing {name} tag"
             )
+
     if polarization is None and "POLARIZATION" in tags:
         raise ValueError(
             f"scientific COG validation failed for {path}: unexpected POLARIZATION tag"
@@ -163,15 +177,19 @@ def validate_scientific_cog(
 def write_thumbnail(path: Path, gamma0: np.ndarray) -> Path:
     """Write and validate a display-only HH/HV/VV Gamma0 RGB thumbnail."""
     gamma0 = np.asarray(gamma0, dtype="float32")
+
     if gamma0.ndim != 3 or gamma0.shape[0] != len(POLARIZATIONS):
         raise ValueError("Gamma0 thumbnail requires four polarizations")
+
     if not path.parent.is_dir():
         raise ValueError(f"thumbnail directory does not exist: {path.parent}")
 
     channels = tuple(
         POLARIZATIONS.index(polarization) for polarization in THUMBNAIL_POLARIZATIONS
     )
+
     rgb = np.stack([_display_channel(gamma0[index]) for index in channels])
+
     with open_raster(
         path,
         "w",
@@ -183,7 +201,9 @@ def write_thumbnail(path: Path, gamma0: np.ndarray) -> Path:
     ) as dataset:
         dataset.write(rgb)
         dataset.colorinterp = (ColorInterp.red, ColorInterp.green, ColorInterp.blue)
+
     validate_thumbnail(path)
+
     return path
 
 
@@ -214,12 +234,16 @@ def _validated_scientific_arrays(
     beta0 = np.asarray(beta0, dtype="float32")
     gamma0 = np.asarray(gamma0, dtype="float32")
     gamma_nought = np.asarray(gamma_nought, dtype="float32")
+
     if beta0.ndim != 3 or beta0.shape[0] != len(POLARIZATIONS):
         raise ValueError("Beta0 must contain four polarizations")
+
     if gamma0.shape != beta0.shape:
         raise ValueError("Beta0 and Gamma0 must have the same shape")
+
     if gamma_nought.shape != beta0.shape[-2:]:
         raise ValueError("GammaNought must match the Beta0 window shape")
+
     return beta0, gamma0, gamma_nought
 
 
@@ -241,6 +265,7 @@ def _warp_array(
 ) -> np.ndarray:
     """Directly bilinearly warp one local radar-space array to one tile grid."""
     destination = np.full(grid.shape, np.nan, dtype="float32")
+
     reproject(
         source=data,
         destination=destination,
@@ -288,8 +313,10 @@ def _write_cog(
             "SOURCE_ITEM_ID": source_item_id,
             "PROCESSING_VERSION": processing_version,
         }
+
         if polarization is not None:
             tags["POLARIZATION"] = polarization
+
         dataset.update_tags(**tags)
 
 
@@ -297,13 +324,17 @@ def _display_channel(data: np.ndarray) -> np.ndarray:
     """Apply the notebook's deterministic 2nd-to-98th percentile display stretch."""
     output = np.zeros(data.shape, dtype="uint8")
     valid = np.isfinite(data)
+
     if not valid.any():
         return output
+
     low, high = np.percentile(data[valid], (2, 98))
     if high <= low:
         output[valid] = 255
         return output
+
     output[valid] = np.clip((data[valid] - low) / (high - low) * 255, 0, 255).astype(
         "uint8"
     )
+
     return output

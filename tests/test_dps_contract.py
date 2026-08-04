@@ -12,15 +12,21 @@ STAGED_INPUTS = {
     "radiometry_lut": "File",
     "annotation_xml": "File",
 }
-SETTINGS = {"resolution": ("double", 25), "overwrite": ("boolean", False)}
+FETCH_INPUTS = {"item_id": "string"}
+CONTRACTS = {
+    "staged": ("esa_biomass_gamma0_staged", STAGED_INPUTS, False),
+    "fetch": ("esa_biomass_gamma0_fetch", FETCH_INPUTS, True),
+}
 
 
-def _load_yaml(name: str) -> dict[str, object]:
+def _load_yaml(path: Path) -> dict[str, object]:
     """Load one repository-owned YAML contract document."""
-    return yaml.safe_load((ROOT / name).read_text(encoding="utf-8"))
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def _input_mapping(inputs: dict[str, object] | list[dict[str, object]]) -> dict[str, object]:
+def _input_mapping(
+    inputs: dict[str, object] | list[dict[str, object]],
+) -> dict[str, object]:
     """Normalize mapping and list input declarations to one mapping shape."""
     if isinstance(inputs, list):
         return {item["name"]: item for item in inputs}
@@ -32,70 +38,106 @@ def _input_types(inputs: dict[str, object]) -> dict[str, object]:
     return {name: value["type"] for name, value in inputs.items()}
 
 
-def test_dps_metadata_and_cwl_expose_matching_staged_inputs() -> None:
-    """Algorithm metadata and both CWL graph nodes share the public inputs."""
-    algorithm = _load_yaml("algorithm.yml")
-    cwl = _load_yaml("esa-biomass-gamma0.cwl")
-    workflow, tool = cwl["$graph"]
-    algorithm_inputs = {item["name"]: item for item in algorithm["inputs"]}
+def test_dps_metadata_and_cwl_expose_matching_mode_inputs() -> None:
+    """Each descriptor exposes only the inputs for its execution mode."""
+    for mode, (algorithm_name, mode_inputs, _) in CONTRACTS.items():
+        directory = ROOT / "dps" / mode
+        algorithm = _load_yaml(directory / "algorithm.yml")
+        cwl = _load_yaml(directory / f"esa-biomass-gamma0-{mode}.cwl")
+        workflow, tool = cwl["$graph"]
+        algorithm_inputs = {item["name"]: item for item in algorithm["inputs"]}
 
-    for declarations in (algorithm_inputs, workflow["inputs"], tool["inputs"]):
-        inputs = _input_mapping(declarations)
-        assert _input_types(inputs) == {
-            **STAGED_INPUTS, **{name: setting[0] for name, setting in SETTINGS.items()}
+        assert algorithm["algorithm_name"] == algorithm_name
+        for declarations in (algorithm_inputs, workflow["inputs"], tool["inputs"]):
+            inputs = _input_mapping(declarations)
+            assert _input_types(inputs) == mode_inputs
+            for name, expected_type in mode_inputs.items():
+                assert inputs[name]["type"] == expected_type
+
+
+def test_cwl_returns_only_local_output_with_mode_specific_network_access() -> None:
+    """Both tools return ``output`` while only fetch permits networking."""
+    for mode, (_, _, network_access) in CONTRACTS.items():
+        cwl_path = ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl"
+        workflow, tool = _load_yaml(cwl_path)["$graph"]
+
+        assert workflow["outputs"] == {
+            "output": {"type": "Directory", "outputSource": "process/output"}
         }
-        for name, expected_type in STAGED_INPUTS.items():
-            assert inputs[name]["type"] == expected_type
-        for name, (expected_type, default) in SETTINGS.items():
-            assert inputs[name]["type"] == expected_type
-            assert inputs[name]["default"] == default
+        assert tool["outputs"] == {
+            "output": {"type": "Directory", "outputBinding": {"glob": "output"}}
+        }
+        assert tool["requirements"]["NetworkAccess"] == {
+            "networkAccess": network_access
+        }
+
+    staged_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "dps" / "staged").iterdir()
+        if path.is_file()
+    ).lower()
+    assert "secret" not in staged_text
+    assert "credential" not in staged_text
 
 
-def test_cwl_returns_only_the_local_output_directory_without_network_access() -> None:
-    """The CWL tool stages local Files and produces the local output Directory."""
-    cwl = _load_yaml("esa-biomass-gamma0.cwl")
-    workflow, tool = cwl["$graph"]
+def test_shell_wrappers_use_mode_specific_frozen_uv_runtimes(tmp_path: Path) -> None:
+    """Wrappers are syntactically valid and create only their local output directory."""
+    for mode in CONTRACTS:
+        directory = ROOT / "dps" / mode
+        for name in ("build.sh", "run.sh"):
+            subprocess.run(["bash", "-n", directory / name], check=True)
+        run = subprocess.run(
+            [directory / "run.sh", "--help"],
+            cwd=tmp_path,
+            text=True,
+            capture_output=True,
+        )
 
-    assert workflow["outputs"] == {
-        "output": {"type": "Directory", "outputSource": "process/output"}
+        assert run.returncode == 0
+        assert (tmp_path / "output").is_dir()
+        expected_flag = "--source-item" if mode == "staged" else "item_id"
+        assert expected_flag in run.stdout
+        build = (directory / "build.sh").read_text(encoding="utf-8")
+        runner = (directory / "run.sh").read_text(encoding="utf-8")
+        assert "uv sync --frozen --no-dev" in build
+        assert "uv run --frozen --no-dev" in runner
+        assert ("--extra fetch" in build) is (mode == "fetch")
+        assert ("--extra fetch" in runner) is (mode == "fetch")
+        assert "conda" not in build.lower()
+        assert "conda" not in runner.lower()
+
+
+def test_root_descriptors_are_replaced_by_two_registered_packages() -> None:
+    """The old single-package registration files no longer exist at repository root."""
+    for name in (
+        "algorithm.yml",
+        "esa-biomass-gamma0.cwl",
+        "build.sh",
+        "run.py",
+        "run.sh",
+    ):
+        assert not (ROOT / name).exists()
+
+
+def test_documentation_names_both_dps_contracts_without_fetch_environment_secrets() -> (
+    None
+):
+    """Users and maintainers can find both registration forms and their boundaries."""
+    documents = {
+        "README.md": (ROOT / "README.md").read_text(encoding="utf-8"),
+        "AGENTS.md": (ROOT / "AGENTS.md").read_text(encoding="utf-8"),
+        "dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md": (
+            ROOT / "dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md"
+        ).read_text(encoding="utf-8"),
+        "dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md": (
+            ROOT / "dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md"
+        ).read_text(encoding="utf-8"),
     }
-    assert tool["outputs"] == {
-        "output": {"type": "Directory", "outputBinding": {"glob": "output"}}
-    }
-    assert tool["requirements"]["NetworkAccess"] == {"networkAccess": False}
-    assert "secret" not in (ROOT / "esa-biomass-gamma0.cwl").read_text().lower()
-    assert "credential" not in (ROOT / "esa-biomass-gamma0.cwl").read_text().lower()
 
-
-def test_shell_wrappers_use_the_frozen_uv_runtime(tmp_path: Path) -> None:
-    """The wrappers are syntactically valid and the runner creates local output."""
-    for name in ("build.sh", "run.sh"):
-        subprocess.run(["bash", "-n", ROOT / name], check=True)
-    run = subprocess.run(
-        [ROOT / "run.sh", "--help"], cwd=tmp_path, text=True, capture_output=True
-    )
-
-    assert run.returncode == 0
-    assert (tmp_path / "output").is_dir()
-    assert "--source-item" in run.stdout
-    build = (ROOT / "build.sh").read_text(encoding="utf-8")
-    runner = (ROOT / "run.sh").read_text(encoding="utf-8")
-    assert "uv sync --frozen --no-dev" in build
-    assert "uv run --frozen --no-dev" in runner
-    assert "conda" not in build.lower()
-    assert "conda" not in runner.lower()
-
-
-def test_documentation_names_the_implemented_runtime_contract() -> None:
-    """User-facing documentation names the installed CLI and output contract."""
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    specification = (
-        ROOT / "dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md"
-    ).read_text(encoding="utf-8")
-
-    for document in (readme, specification):
-        assert "process-gamma0" in document
-        assert "uv run --frozen --no-dev" in document
-        assert "./output" in document
-        assert "study vector" not in document
-    assert "remaining work is the package CLI" not in readme
+    for text in documents.values():
+        assert "esa_biomass_gamma0_staged" in text
+        assert "esa_biomass_gamma0_fetch" in text
+        assert "dps/staged/" in text
+        assert "dps/fetch/" in text
+    assert "MAAP().secrets.get_secret" in documents["README.md"]
+    assert "environment secrets for fetch" not in documents["README.md"].lower()

@@ -4,6 +4,7 @@
 import argparse
 import json
 import logging
+import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Sequence
 from urllib.parse import urlsplit
@@ -12,22 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 def input_paths(output_root: Path) -> tuple[Path, list[Path]]:
-    """Return the root Collection and its registered local Item paths."""
+    """Return the root Catalog and its registered local Item paths."""
     output_root = Path(output_root).resolve()
     catalog = output_root / "catalog.json"
-    collection = output_root / "collection.json"
     if not catalog.is_file():
         raise ValueError(f"missing root Catalog: {catalog}")
-    if not collection.is_file():
-        raise ValueError(f"missing root Collection: {collection}")
 
     try:
-        document = json.loads(collection.read_text(encoding="utf-8"))
+        document = json.loads(catalog.read_text(encoding="utf-8"))
         links = document["links"]
     except (json.JSONDecodeError, KeyError, TypeError) as error:
-        raise ValueError(f"invalid root Collection: {collection}") from error
+        raise ValueError(f"invalid root Catalog: {catalog}") from error
     if not isinstance(links, list):
-        raise ValueError(f"invalid root Collection links: {collection}")
+        raise ValueError(f"invalid root Catalog links: {catalog}")
 
     items: list[Path] = []
     for link in links:
@@ -35,30 +33,41 @@ def input_paths(output_root: Path) -> tuple[Path, list[Path]]:
             continue
         href = link.get("href")
         if not isinstance(href, str):
-            raise ValueError(f"invalid Item link in root Collection: {collection}")
-        item = (collection.parent / href).resolve()
+            raise ValueError(f"invalid Item link in root Catalog: {catalog}")
+        item = (catalog.parent / href).resolve()
         if output_root not in item.parents or not item.is_file():
-            raise ValueError(f"invalid Item link in root Collection: {href}")
+            raise ValueError(f"invalid Item link in root Catalog: {href}")
         items.append(item)
-    return collection, items
+    return catalog, items
 
 
 def load(
     output_root: Path, asset_root: PurePosixPath = PurePosixPath("/data/gamma0")
 ) -> int:
-    """Upsert one Collection and its Items with local assets mapped for TiTiler."""
+    """Upsert Catalog Items under an ephemeral Collection for PgSTAC."""
+    from pystac import Item
     from pypgstac.db import PgstacDB
     from pypgstac.load import Loader, Methods
 
+    from esa_biomass_gamma0.stac import create_collection
+
     output_root = Path(output_root).resolve()
-    collection, items = input_paths(output_root)
+    _, items = input_paths(output_root)
+    collection = create_collection([Item.from_file(str(path)) for path in items])
     documents = [_read_document(path, output_root, asset_root) for path in items]
-    with PgstacDB() as database:
-        loader = Loader(database)
-        loader.load_collections(str(collection), insert_mode=Methods.upsert)
-        if documents:
-            loader.load_items(iter(documents), insert_mode=Methods.upsert)
-    logger.info("Loaded one Collection and %d Item(s) into PgSTAC", len(documents))
+    for document in documents:
+        document["collection"] = collection.id
+    with tempfile.TemporaryDirectory() as directory:
+        collection_path = Path(directory) / "collection.json"
+        collection.set_self_href(str(collection_path))
+        collection.validate()
+        collection_path.write_text(json.dumps(collection.to_dict()), encoding="utf-8")
+        with PgstacDB() as database:
+            loader = Loader(database)
+            loader.load_collections(str(collection_path), insert_mode=Methods.upsert)
+            if documents:
+                loader.load_items(iter(documents), insert_mode=Methods.upsert)
+    logger.info("Loaded %d Item(s) into PgSTAC", len(documents))
     return len(documents)
 
 

@@ -4,10 +4,12 @@ from pathlib import Path
 
 from affine import Affine
 from conftest import write_item as write_source_item
-from pystac import Catalog, Collection, RelType
+from pystac import Catalog, RelType
+from pystac.extensions.mgrs import MgrsExtension
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterExtension
 from pystac.extensions.render import RenderExtension
+from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 
@@ -17,6 +19,7 @@ from esa_biomass_gamma0.source import validate_staged_source
 from esa_biomass_gamma0.stac import (
     COLLECTION_ID,
     build_item,
+    create_collection,
     is_complete_product,
     rebuild_catalog,
     source_footprint,
@@ -102,7 +105,8 @@ def test_builds_a_valid_item_for_complete_local_assets(
     write_item(item, directory / "item.json")
 
     assert item.id == "gamma0-BIOMASS_TEST_001-32TPR"
-    assert item.collection_id == COLLECTION_ID
+    assert item.collection_id is None
+    assert item.get_links("collection") == []
     assert set(item.assets) == {
         "beta0_hh",
         "beta0_hv",
@@ -112,11 +116,27 @@ def test_builds_a_valid_item_for_complete_local_assets(
         "gamma0_hv",
         "gamma0_vh",
         "gamma0_vv",
-        "gamma_nought",
+        "gamma0_lut",
         "thumbnail",
     }
-    assert item.properties["mgrs:tile"] == grid.tile_id
-    assert item.properties["sar:polarizations"] == ["HH", "HV", "VH", "VV"]
+    mgrs = MgrsExtension.ext(item)
+    assert (mgrs.utm_zone, mgrs.latitude_band, mgrs.grid_square) == (32, "T", "PR")
+    sar = SarExtension.ext(item)
+    assert sar.instrument_mode == "P-SAR"
+    assert sar.frequency_band == FrequencyBand.P
+    assert sar.polarizations == [
+        Polarization.HH,
+        Polarization.HV,
+        Polarization.VH,
+        Polarization.VV,
+    ]
+    assert sar.product_type == "Gamma0"
+    assert item.properties["processing:software"] == {"esa-biomass-gamma0": "0.1.0"}
+    assert "processing:level" not in item.properties
+    assert item.get_links("processing-software")[0].target == (
+        "https://github.com/MAAP-Project/esa-biomass-gamma0"
+    )
+    assert SarExtension.ext(item.assets["gamma0_hh"]).polarizations == [Polarization.HH]
     assert "maap:source_item_id" not in item.properties
     assert "maap:source_collection" not in item.properties
     source_links = item.get_links(RelType.DERIVED_FROM)
@@ -132,7 +152,7 @@ def test_builds_a_valid_item_for_complete_local_assets(
     assert RasterExtension.ext(item.assets["gamma0_hh"]).bands[0].nodata == -9999.0
     assert item.assets["beta0_hh"].title == "Beta0 HH amplitude"
     assert item.assets["gamma0_hh"].title == "Linear Gamma0 HH intensity"
-    assert item.assets["gamma0_hh"].roles == ["data", "gamma0"]
+    assert item.assets["gamma0_hh"].roles == ["data"]
     assert item.assets["thumbnail"].title == "Gamma0 RGB thumbnail"
     assert item.assets["thumbnail"].roles == ["thumbnail", "overview"]
     assert "secret" not in str(item.to_dict())
@@ -146,31 +166,13 @@ def test_builds_a_valid_item_for_complete_local_assets(
     )
 
 
-def test_rebuild_catalog_recovers_valid_products_and_handles_empty_results(
+def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
     tmp_path: Path, staged_paths: dict[str, Path]
 ) -> None:
-    """Catalog rebuilding registers valid leaves and preserves the empty contract."""
+    """Catalog rebuilding links valid leaves directly without writing a Collection."""
     assert rebuild_catalog(tmp_path) == 0
-    empty = Collection.from_file(tmp_path / "collection.json")
-    assert empty.extent.spatial.bboxes == [[-180.0, -90.0, 180.0, 90.0]]
-    assert empty.extent.temporal.intervals == [[None, None]]
-    assert set(empty.item_assets) == {
-        "beta0_hh",
-        "beta0_hv",
-        "beta0_vh",
-        "beta0_vv",
-        "gamma0_hh",
-        "gamma0_hv",
-        "gamma0_vh",
-        "gamma0_vv",
-        "gamma_nought",
-        "thumbnail",
-    }
-    assert set(RenderExtension.ext(empty).renders) == {
-        "beta0-rgb",
-        "gamma0-rgb",
-        "gamma0-correction-factor",
-    }
+    assert list(Catalog.from_file(tmp_path / "catalog.json").get_items()) == []
+    assert not (tmp_path / "collection.json").exists()
 
     directory, source, grid = _product(tmp_path, staged_paths)
     item = build_item(source, grid, directory, processing_version="0.1.0")
@@ -184,16 +186,16 @@ def test_rebuild_catalog_recovers_valid_products_and_handles_empty_results(
         source, other_grid, other_directory, processing_version="0.1.0"
     )
     write_item(other_item, other_directory / "item.json")
-    (tmp_path / "catalog.json").unlink()
+    (tmp_path / "collection.json").write_text("obsolete", encoding="utf-8")
 
     assert rebuild_catalog(tmp_path) == 2
     catalog = Catalog.from_file(tmp_path / "catalog.json")
-    collection = next(catalog.get_children())
+    assert [product.id for product in catalog.get_items()] == [item.id, other_item.id]
+    assert list(catalog.get_children()) == []
+    assert not (tmp_path / "collection.json").exists()
+
+    collection = create_collection([item, other_item])
     assert collection.id == COLLECTION_ID
-    assert [product.id for product in collection.get_items()] == [
-        item.id,
-        other_item.id,
-    ]
     assert collection.extent.temporal.intervals == [[source.datetime, source.datetime]]
     assert item.bbox is not None
     assert other_item.bbox is not None
@@ -205,33 +207,16 @@ def test_rebuild_catalog_recovers_valid_products_and_handles_empty_results(
             max(item.bbox[3], other_item.bbox[3]),
         ]
     ]
-    assert {
-        key: render.to_dict()
-        for key, render in RenderExtension.ext(collection).renders.items()
-    } == {
-        "beta0-rgb": {
-            "title": "Beta0 HH/HV/VV RGB",
-            "assets": ["beta0_hh", "beta0_hv", "beta0_vv"],
-            "rescale": [[0.1, 1.0], [0.025, 0.42], [0.12, 0.8]],
-            "nodata": -9999.0,
-        },
-        "gamma0-rgb": {
-            "title": "Linear Gamma0 HH/HV/VV RGB",
-            "assets": ["gamma0_hh", "gamma0_hv", "gamma0_vv"],
-            "rescale": [[0.005, 0.5], [0.0003, 0.09], [0.007, 0.3]],
-            "nodata": -9999.0,
-        },
-        "gamma0-correction-factor": {
-            "title": "Gamma0 correction factor",
-            "assets": ["gamma_nought"],
-            "rescale": [[0, 1]],
-            "colormap_name": "thermal",
-            "nodata": -9999.0,
-        },
+    assert set(collection.item_assets) == set(item.assets)
+    assert set(RenderExtension.ext(collection).renders) == {
+        "beta0-rgb",
+        "gamma0-rgb",
+        "gamma0-correction-factor",
     }
-    assert {
-        key: definition.to_dict() for key, definition in collection.item_assets.items()
-    } == {
-        key: {"title": asset.title, "type": asset.media_type, "roles": asset.roles}
-        for key, asset in item.assets.items()
+    assert collection.providers[0].extra_fields["processing:software"] == {
+        "esa-biomass-gamma0": "0.1.0"
     }
+    assert collection.get_links("processing-software")[0].target == (
+        "https://github.com/MAAP-Project/esa-biomass-gamma0"
+    )
+    collection.validate()

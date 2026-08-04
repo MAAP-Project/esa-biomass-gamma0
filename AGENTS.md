@@ -16,9 +16,10 @@ or architectural decision.
 - `main.py` remains the native-radar-grid diagnostic reference. It can
   authenticate and cache source assets for local testing, validates physical LUT
   alignment, and writes GCP-referenced diagnostic COGs.
-- Production code receives staged local paths for a source STAC Item JSON,
-  Beta0 TIFF, radiometry LUT NetCDF, and annotation XML. It
-  must not authenticate, search STAC, download assets, or make HTTP requests.
+- The scientific workflow receives staged local paths for a source STAC Item
+  JSON, Beta0 TIFF, radiometry LUT NetCDF, and annotation XML. It must not
+  authenticate, search STAC, download assets, or make HTTP requests. The fetch
+  adapter alone materializes those paths from an Item ID using MAAP secrets.
 - Native-grid diagnostics are not production assets. Do not advertise them as a
   tile collection, stack them with fixed-grid products, or use them in temporal
   composites.
@@ -56,9 +57,11 @@ or architectural decision.
    directory, then rebuild the local STAC Catalog and Collection from valid
    products.
 
-STAC search, authentication, and asset download belong upstream. For local
-validation, `main.py` may materialize the source Item and three granule assets;
-the production path accepts the four staged local files without an AOI or study-vector input.
+The staged algorithm never searches, authenticates, or downloads. The fetch
+algorithm retrieves MAAP secrets through `MAAP().secrets.get_secret`, materializes
+job-local files, and delegates to the same staged workflow. For local validation,
+`main.py` may materialize the source Item and three granule assets; neither mode
+accepts an AOI or study-vector input.
 
 ## Output contract
 
@@ -97,18 +100,28 @@ the production path accepts the four staged local files without an AOI or study-
 
 ## OGC Application Package structure
 
-Follow the wrapper shape of sibling `../esa-biomass-dps`; use this package's
-staged-input and uv runtime contract:
+Follow the wrapper shape of sibling `../esa-biomass-dps`; `dps/staged/` and
+`dps/fetch/` are independently registered MAAP package directories:
 
 ```text
-algorithm.yml                    # MAAP metadata, input schema, resources, commands
-esa-biomass-gamma0.cwl           # CWL Workflow + CommandLineTool, returning ./output
-build.sh                          # install frozen uv production environment
-run.sh                            # create ./output; forward staged paths to run.py
-run.py                            # thin CLI adapter; no processing or downloads
+dps/
+  staged/                         # network-free staged-file MAAP package
+    algorithm.yml
+    esa-biomass-gamma0-staged.cwl
+    build.sh
+    run.py
+    run.sh
+  fetch/                          # Item-ID MAAP package with network access
+    algorithm.yml
+    esa-biomass-gamma0-fetch.cwl
+    build.sh
+    run.py
+    run.sh
 src/esa_biomass_gamma0/          # reusable production workflow package
   calibration.py
   cli.py
+  fetch.py
+  materialization.py
   grids.py
   raster.py
   source.py
@@ -120,16 +133,18 @@ main.py                           # retained diagnostic reference
 
 Do not duplicate processing logic across `run.sh`, `run.py`, CWL, notebooks, or
 `main.py`. Shell and CWL files adapt runtime inputs only; package Python owns
-the workflow. `algorithm.yml`, CWL, shell wrappers, and the CLI use
-`source_item`, `beta0_tiff`, `radiometry_lut`, `annotation_xml`, `resolution`
-(fixed to 25 m), and `overwrite` with matching defaults. The four path inputs
-stage as OGC `File` values. `run.py` receives local paths. CWL
-returns `./output` as a `Directory` and disables network access.
+the workflow. `esa_biomass_gamma0_staged` uses `source_item`, `beta0_tiff`,
+`radiometry_lut`, and `annotation_xml`; the four paths stage as OGC `File`
+values. `esa_biomass_gamma0_fetch` uses only `item_id`, then hands local paths
+to the staged CLI. DPS products are fixed at 25 m and jobs do not expose an
+overwrite control. Both CWL files return `./output` as a `Directory`; staged
+disables network access and fetch enables it.
 
 `pyproject.toml` and `uv.lock` are the sole production dependency definition and
-lock. `build.sh` uses `uv sync --frozen --no-dev`; `run.sh` uses
-`uv run --frozen --no-dev`. Do not add conda manifests, a second package manager,
-or a bespoke execution framework.
+lock. Both `build.sh` files use `uv sync --frozen --no-dev`; both `run.sh` files
+use `uv run --frozen --no-dev`, with fetch selecting the locked `fetch` extra.
+Do not add conda manifests, a second package manager, or a bespoke execution
+framework.
 
 ## Guardrails
 
@@ -169,8 +184,9 @@ Keep deterministic tests for:
   nodata, quantity, and polarization tags, plus RGB thumbnail validation;
 - STAC assets, source links, time, projection/raster/SAR metadata, empty
   results, idempotency, overwrite safety, and Catalog rebuild recovery; and
-- DPS input/default parity, staged `File` semantics, output `Directory`, and
-  disabled network access.
+- DPS input parity, staged `File` semantics and disabled network access, fetch
+  Item-ID-only semantics and enabled network access, and a shared output
+  `Directory`.
 
 Before release promotion, compare a windowed-LUT result with the full-frame
 diagnostic reference. Valid-pixel Gamma0 differences must remain below `1e-3`

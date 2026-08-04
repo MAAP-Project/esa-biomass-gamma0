@@ -22,7 +22,14 @@ def test_target_grid_has_exact_northern_and_southern_utm_geometry() -> None:
     assert southern.epsg == 32734
     assert northern.bounds == (600_000.0, 5_000_000.0, 700_000.0, 5_100_000.0)
     assert northern.shape == southern.shape == (4000, 4000)
-    assert northern.transform.to_gdal() == (600_000.0, 25.0, 0.0, 5_100_000.0, 0.0, -25.0)
+    assert northern.transform.to_gdal() == (
+        600_000.0,
+        25.0,
+        0.0,
+        5_100_000.0,
+        0.0,
+        -25.0,
+    )
 
 
 def test_candidate_grids_use_only_utm_zones_intersecting_the_source_bbox() -> None:
@@ -95,7 +102,9 @@ def test_gcp_window_padding_clips_at_each_raster_edge(
         GroundControlPoint(row=row_stop, col=col_stop, x=xmax, y=ymin),
     ]
 
-    assert gcp_pixel_window(grid, gcps, grid.crs, 100, 100, padding_pixels=8) == expected
+    assert (
+        gcp_pixel_window(grid, gcps, grid.crs, 100, 100, padding_pixels=8) == expected
+    )
 
 
 def test_rejects_missing_gcps_and_shifts_without_mutating_them() -> None:
@@ -104,7 +113,9 @@ def test_rejects_missing_gcps_and_shifts_without_mutating_them() -> None:
     with np.testing.assert_raises_regex(ValueError, "GCPs"):
         gcp_pixel_window(grid, [], grid.crs, 100, 100)
     with np.testing.assert_raises_regex(ValueError, "GCPs"):
-        gcp_pixel_window(grid, [GroundControlPoint(row=0, col=0, x=0, y=0)], None, 100, 100)
+        gcp_pixel_window(
+            grid, [GroundControlPoint(row=0, col=0, x=0, y=0)], None, 100, 100
+        )
 
     outside_gcps = [
         GroundControlPoint(row=100, col=100, x=grid.bounds[0], y=grid.bounds[3]),
@@ -121,5 +132,10 @@ def test_rejects_missing_gcps_and_shifts_without_mutating_them() -> None:
 
     original = [GroundControlPoint(row=30, col=40, x=1, y=2)]
     shifted = shifted_gcps(original, Window(20, 10, 5, 5))
-    assert (shifted[0].row, shifted[0].col, shifted[0].x, shifted[0].y) == (20, 20, 1, 2)
+    assert (shifted[0].row, shifted[0].col, shifted[0].x, shifted[0].y) == (
+        20,
+        20,
+        1,
+        2,
+    )
     assert (original[0].row, original[0].col) == (30, 40)

@@ -1,9 +1,9 @@
 """Validation for the local staged-source trust boundary."""
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import math
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
@@ -38,6 +38,7 @@ def sanitize_href(href: str) -> str:
     """Remove credentials and ephemeral URL components from source provenance."""
     parsed = urlsplit(href)
     host = parsed.netloc.rsplit("@", maxsplit=1)[-1]
+
     return urlunsplit((parsed.scheme, host, parsed.path, "", ""))
 
 
@@ -54,6 +55,7 @@ def validate_staged_source(
         "radiometry_lut": Path(radiometry_lut),
         "annotation_xml": Path(annotation_xml),
     }
+
     for name, path in paths.items():
         _require_readable_file(name, path)
 
@@ -79,6 +81,7 @@ def validate_staged_source(
         asset_hrefs[key] = sanitize_href(asset.href)
 
     self_href = item.get_self_href()
+
     return StagedSource(
         item_id=item.id,
         collection_id=item.collection_id,
@@ -96,6 +99,7 @@ def _require_readable_file(name: str, path: Path) -> None:
     try:
         with path.open("rb") as file:
             file.read(1)
+
     except OSError as error:
         raise ValueError(f"{name}: cannot read {path}") from error
 
@@ -103,18 +107,26 @@ def _require_readable_file(name: str, path: Path) -> None:
 def _validate_bbox(bbox: list[float] | None) -> tuple[float, float, float, float]:
     if bbox is None or len(bbox) not in (4, 6):
         raise ValueError("source_item: bbox must contain four or six coordinates")
+
     if len(bbox) == 4:
         west, south, east, north = bbox
     else:
         west, south, _, east, north, _ = bbox
+
     values = (float(west), float(south), float(east), float(north))
+
     if not all(math.isfinite(value) for value in values):
         raise ValueError("source_item: bbox contains a non-finite coordinate")
+
     west, south, east, north = values
+
     if west > east:
         raise ValueError("source_item: antimeridian bbox is unsupported")
+
     if not -180 <= west < east <= 180 or not -90 <= south < north <= 90:
         raise ValueError("source_item: malformed bbox")
+
     if south <= -80 or north >= 84:
         raise ValueError("source_item: polar bbox is unsupported for UTM output")
+
     return values

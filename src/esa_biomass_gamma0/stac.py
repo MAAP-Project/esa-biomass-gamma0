@@ -10,19 +10,23 @@ from typing import Any
 import numpy as np
 from pyproj import Transformer
 from pystac import (
-    Asset,
     Catalog,
     Collection,
     Extent,
     Item,
+    ItemAssetDefinition,
     Link,
+    Provider,
+    ProviderRole,
     RelType,
     SpatialExtent,
     TemporalExtent,
 )
+from pystac.extensions.mgrs import MgrsExtension
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterBand, RasterExtension
 from pystac.extensions.render import Render, RenderExtension
+from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 from rasterio.transform import Affine, GCPTransformer, array_bounds
@@ -37,36 +41,54 @@ from esa_biomass_gamma0.raster import (
 from esa_biomass_gamma0.source import StagedSource
 
 COLLECTION_ID = "biomass-gamma0-mgrs-25m"
+PACKAGE_NAME = "esa-biomass-gamma0"
+REPOSITORY_URL = "https://github.com/MAAP-Project/esa-biomass-gamma0"
+PROCESSING_EXTENSION_SCHEMA = (
+    "https://stac-extensions.github.io/processing/v1.2.0/schema.json"
+)
 SCIENTIFIC_MEDIA_TYPE = "image/tiff; application=geotiff; profile=cloud-optimized"
-SCIENTIFIC_ASSETS = {
+THUMBNAIL_KEY = "thumbnail"
+ITEM_ASSETS = {
     **{
-        f"beta0_{polarization.lower()}": (
-            "beta0_amplitude",
-            f"Beta0 {polarization} amplitude",
-            polarization,
-            ["data", "beta0"],
+        f"beta0_{polarization.lower()}": ItemAssetDefinition(
+            {
+                "title": f"Beta0 {polarization} amplitude",
+                "type": SCIENTIFIC_MEDIA_TYPE,
+                "roles": ["data"],
+            }
         )
         for polarization in POLARIZATIONS
     },
     **{
-        f"gamma0_{polarization.lower()}": (
-            "gamma0_linear_intensity",
-            f"Linear Gamma0 {polarization} intensity",
-            polarization,
-            ["data", "gamma0"],
+        f"gamma0_{polarization.lower()}": ItemAssetDefinition(
+            {
+                "title": f"Linear Gamma0 {polarization} intensity",
+                "type": SCIENTIFIC_MEDIA_TYPE,
+                "roles": ["data"],
+            }
         )
         for polarization in POLARIZATIONS
     },
-    "gamma_nought": (
-        "gamma_nought_calibration_factor",
-        "GammaNought calibration factor",
-        None,
-        ["data", "calibration"],
+    "gamma0_lut": ItemAssetDefinition(
+        {
+            "title": "Bilinearly resampled Gamma0 multiplicative factor",
+            "type": SCIENTIFIC_MEDIA_TYPE,
+            "roles": ["data"],
+        }
+    ),
+    THUMBNAIL_KEY: ItemAssetDefinition(
+        {
+            "title": "Gamma0 RGB thumbnail",
+            "type": "image/png",
+            "roles": ["thumbnail", "overview"],
+        }
     ),
 }
-THUMBNAIL_KEY = "thumbnail"
-THUMBNAIL_TITLE = "Gamma0 RGB thumbnail"
-THUMBNAIL_ROLES = ["thumbnail", "overview"]
+SCIENTIFIC_QUANTITIES = {
+    "beta0": "beta0_amplitude",
+    "gamma0": "gamma0_linear_intensity",
+    "gamma0_lut": "gamma_nought_calibration_factor",
+}
 
 
 def source_footprint(
@@ -80,21 +102,28 @@ def source_footprint(
     if not gcps or gcp_crs is None or source_height < 2 or source_width < 2:
         return None
     rows, columns = _source_boundary(source_height, source_width)
+
     try:
         with GCPTransformer(gcps) as transformer:
             x, y = transformer.xy(rows, columns)
+
         to_grid = Transformer.from_crs(gcp_crs, grid.crs, always_xy=True)
         x, y = to_grid.transform(x, y)
         polygon = _clip_to_bounds(list(zip(x, y, strict=True)), grid.bounds)
+
         if len(polygon) < 3 or not np.isfinite(polygon).all():
             return None
+
         to_wgs84 = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
         longitude, latitude = to_wgs84.transform(*zip(*polygon, strict=True))
+
     except Exception:  # GDAL transformers can fail on malformed but present GCPs.
         return None
+
     coordinates = list(zip(longitude, latitude, strict=True))
     if not np.isfinite(coordinates).all():
         return None
+
     coordinates.append(coordinates[0])
     return {"type": "Polygon", "coordinates": [[list(point) for point in coordinates]]}
 
@@ -111,40 +140,56 @@ def build_item(
     partial_coverage = geometry is None
     geometry = geometry or tile_geometry(grid)
     properties: dict[str, Any] = {
-        "mgrs:tile": grid.tile_id,
         "platform": "BIOMASS",
         "instruments": ["P-SAR"],
-        "sar:polarizations": list(POLARIZATIONS),
-        "processing:level": "Gamma0",
-        "maap:processing_version": processing_version,
+        "processing:software": {PACKAGE_NAME: processing_version},
     }
+
     if partial_coverage:
         properties["maap:partial_coverage"] = True
+
     item = Item(
         id=f"gamma0-{source.item_id}-{grid.tile_id}",
         geometry=geometry,
         bbox=_geometry_bbox(geometry),
         datetime=source.datetime,
         properties=properties,
-        collection=COLLECTION_ID,
     )
-    item.add_link(Link(rel="collection", target="../../../collection.json"))
+    item.stac_extensions.append(PROCESSING_EXTENSION_SCHEMA)
+    item.add_link(
+        Link(
+            rel="processing-software",
+            target=REPOSITORY_URL,
+            media_type="text/html",
+            title="ESA BIOMASS Gamma0 source repository",
+        )
+    )
+
     ProjectionExtension.ext(item, add_if_missing=True).apply(
         epsg=grid.epsg,
         shape=list(grid.shape),
         transform=list(grid.transform)[:6],
     )
-    for key, (quantity, title, polarization, roles) in SCIENTIFIC_ASSETS.items():
-        path = directory / f"{key}.tif"
+    MgrsExtension.ext(item, add_if_missing=True).apply(*_mgrs_components(grid))
+    SarExtension.ext(item, add_if_missing=True).apply(
+        instrument_mode="P-SAR",
+        frequency_band=FrequencyBand.P,
+        polarizations=[Polarization(value) for value in POLARIZATIONS],
+        product_type="Gamma0",
+    )
+
+    for key, definition in ITEM_ASSETS.items():
+        filename = "thumbnail.png" if key == THUMBNAIL_KEY else f"{key}.tif"
+        path = directory / filename
         if not path.is_file():
-            raise ValueError(f"missing scientific asset: {path}")
-        asset = Asset(
-            href=path.name,
-            media_type=SCIENTIFIC_MEDIA_TYPE,
-            roles=roles,
-            title=title,
-        )
+            raise ValueError(f"missing product asset: {path}")
+
+        asset = definition.create_asset(path.name)
         item.add_asset(key, asset)
+
+        if key == THUMBNAIL_KEY:
+            continue
+
         ProjectionExtension.ext(asset).apply(
             epsg=grid.epsg,
             shape=list(grid.shape),
@@ -153,25 +198,19 @@ def build_item(
         RasterExtension.ext(asset, add_if_missing=True).apply(
             [RasterBand.create(nodata=float(NODATA), data_type="float32", unit="1")]
         )
+
+        _, polarization = _scientific_asset_details(key)
         if polarization is not None:
-            asset.extra_fields["sar:polarizations"] = [polarization]
-    thumbnail = directory / "thumbnail.png"
-    if not thumbnail.is_file():
-        raise ValueError(f"missing thumbnail asset: {thumbnail}")
-    item.add_asset(
-        THUMBNAIL_KEY,
-        Asset(
-            href=thumbnail.name,
-            media_type="image/png",
-            roles=THUMBNAIL_ROLES,
-            title=THUMBNAIL_TITLE,
-        ),
-    )
+            SarExtension.ext(asset).polarizations = [Polarization(polarization)]
+
     if source.self_href:
         item.add_link(Link.derived_from(source.self_href, title=source.item_id))
+
     for key in ("enclosure_tiff", "enclosure_nc"):
         item.add_link(Link(rel=RelType.VIA, target=source.asset_hrefs[key]))
+
     item.validate()
+
     return item
 
 
@@ -191,12 +230,10 @@ def is_complete_product(directory: Path) -> bool:
     return True
 
 
-def rebuild_catalog(output_root: Path) -> int:
-    """Rebuild root Catalog and Collection files from valid non-temporary products."""
-    output_root.mkdir(parents=True, exist_ok=True)
-    products = _discover_products(output_root)
-    datetimes = [item.datetime for _, item in products]
-    bboxes = [item.bbox for _, item in products]
+def create_collection(items: list[Item]) -> Collection:
+    """Build the optional Collection representation for a set of product Items."""
+    datetimes = [item.datetime for item in items]
+    bboxes = [item.bbox for item in items]
     spatial_bbox = (
         [
             min(bbox[0] for bbox in bboxes),
@@ -207,18 +244,39 @@ def rebuild_catalog(output_root: Path) -> int:
         if bboxes
         else [-180.0, -90.0, 180.0, 90.0]
     )
-    extent = Extent(
-        SpatialExtent([spatial_bbox]),
-        TemporalExtent(
-            [[min(datetimes), max(datetimes)]] if datetimes else [[None, None]]
-        ),
-    )
+    processing_versions = sorted({_processing_version(item) for item in items})
     collection = Collection(
         id=COLLECTION_ID,
         description="Fixed-grid 25 m ESA BIOMASS Beta0 and linear Gamma0 MGRS products.",
-        extent=extent,
+        extent=Extent(
+            SpatialExtent([spatial_bbox]),
+            TemporalExtent(
+                [[min(datetimes), max(datetimes)]] if datetimes else [[None, None]]
+            ),
+        ),
+        providers=[
+            Provider(
+                name="MAAP Project",
+                roles=[ProviderRole.PROCESSOR],
+                url=REPOSITORY_URL,
+                extra_fields={
+                    "processing:software": {
+                        PACKAGE_NAME: ", ".join(processing_versions) or "unknown"
+                    }
+                },
+            )
+        ],
     )
-    collection.item_assets = _item_assets()
+    collection.stac_extensions.append(PROCESSING_EXTENSION_SCHEMA)
+    collection.add_link(
+        Link(
+            rel="processing-software",
+            target=REPOSITORY_URL,
+            media_type="text/html",
+            title="ESA BIOMASS Gamma0 source repository",
+        )
+    )
+    collection.item_assets = ITEM_ASSETS
     RenderExtension.ext(collection, add_if_missing=True).apply(
         {
             "beta0-rgb": Render.create(
@@ -235,33 +293,45 @@ def rebuild_catalog(output_root: Path) -> int:
             ),
             "gamma0-correction-factor": Render.create(
                 title="Gamma0 correction factor",
-                assets=["gamma_nought"],
+                assets=["gamma0_lut"],
                 rescale=[[0, 1]],
                 colormap_name="thermal",
                 nodata=float(NODATA),
             ),
         }
     )
+    for item in items:
+        collection.add_item(item)
+    return collection
+
+
+def rebuild_catalog(output_root: Path) -> int:
+    """Rebuild a root Catalog with direct Item links from valid products."""
+    output_root.mkdir(parents=True, exist_ok=True)
+    products = _discover_products(output_root)
+
     catalog = Catalog(
         id="biomass-gamma0-mgrs-25m-catalog",
         description="Local catalog of fixed-grid ESA BIOMASS Gamma0 products.",
     )
+
     catalog_path = output_root / "catalog.json"
-    collection_path = output_root / "collection.json"
     catalog.set_self_href(str(catalog_path))
-    collection.set_self_href(str(collection_path))
-    catalog.add_link(Link(rel="child", target="collection.json"))
-    collection.add_link(Link(rel="root", target="catalog.json"))
+
     for path, item in products:
-        collection.add_item(item)
         item.set_self_href(str(path))
+        catalog.add_link(
+            Link(rel=RelType.ITEM, target=path.relative_to(output_root).as_posix())
+        )
 
     for _, item in products:
         item.validate()
-    collection.validate()
+
     catalog.validate()
-    _write_json(collection_path, collection.to_dict())
     _write_json(catalog_path, catalog.to_dict())
+
+    (output_root / "collection.json").unlink(missing_ok=True)
+
     return len(products)
 
 
@@ -285,23 +355,34 @@ def _validated_product(directory: Path) -> Item:
     item_path = directory / "item.json"
     if not item_path.is_file():
         raise ValueError(f"missing Item: {item_path}")
+
     try:
         item = Item.from_file(str(item_path))
         item.validate()
     except Exception as error:
         raise ValueError(f"invalid Item: {item_path}: {error}") from error
-    if item.collection_id != COLLECTION_ID or set(item.assets) != {
-        *SCIENTIFIC_ASSETS,
-        THUMBNAIL_KEY,
-    }:
+
+    if set(item.assets) != set(ITEM_ASSETS):
         raise ValueError(f"invalid Item asset contract: {item_path}")
+
     grid = _item_grid(item)
     source_item_id = _source_item_id(item)
-    processing_version = str(item.properties.get("maap:processing_version", ""))
-    if not source_item_id or not processing_version:
+
+    try:
+        processing_version = _processing_version(item)
+    except ValueError as error:
+        raise ValueError(f"invalid Item provenance: {item_path}") from error
+
+    if not source_item_id:
         raise ValueError(f"invalid Item provenance: {item_path}")
-    for key, (quantity, _, polarization, _) in SCIENTIFIC_ASSETS.items():
+
+    for key in ITEM_ASSETS:
+        if key == THUMBNAIL_KEY:
+            continue
+
+        quantity, polarization = _scientific_asset_details(key)
         path = _local_asset_path(directory, item.assets[key].href)
+
         validate_scientific_cog(
             path,
             grid,
@@ -310,27 +391,18 @@ def _validated_product(directory: Path) -> Item:
             source_item_id=source_item_id,
             processing_version=processing_version,
         )
+
     validate_thumbnail(_local_asset_path(directory, item.assets[THUMBNAIL_KEY].href))
+
     return item
 
 
-def _item_assets() -> dict[str, dict[str, Any]]:
-    """Return Collection item-asset definitions for every product asset."""
-    return {
-        **{
-            key: {
-                "title": title,
-                "type": SCIENTIFIC_MEDIA_TYPE,
-                "roles": roles,
-            }
-            for key, (_, title, _, roles) in SCIENTIFIC_ASSETS.items()
-        },
-        THUMBNAIL_KEY: {
-            "title": THUMBNAIL_TITLE,
-            "type": "image/png",
-            "roles": THUMBNAIL_ROLES,
-        },
-    }
+def _scientific_asset_details(key: str) -> tuple[str, str | None]:
+    """Return the COG quantity and optional polarization encoded by an asset key."""
+    if key == "gamma0_lut":
+        return SCIENTIFIC_QUANTITIES[key], None
+    product, polarization = key.split("_", maxsplit=1)
+    return SCIENTIFIC_QUANTITIES[product], polarization.upper()
 
 
 def _discover_products(output_root: Path) -> list[tuple[Path, Item]]:
@@ -343,22 +415,39 @@ def _discover_products(output_root: Path) -> list[tuple[Path, Item]]:
             products.append((path, _validated_product(path.parent)))
         except (OSError, ValueError):
             continue
+
     return products
 
 
 def _source_item_id(item: Item) -> str:
     """Recover the source ID from the contractually structured product Item ID."""
     try:
-        tile_id = str(item.properties["mgrs:tile"])
-    except KeyError as error:
+        tile_id = _item_tile_id(item)
+    except (TypeError, ValueError) as error:
         raise ValueError("invalid Item provenance") from error
+
     prefix, suffix = "gamma0-", f"-{tile_id}"
     if not item.id.startswith(prefix) or not item.id.endswith(suffix):
         raise ValueError("invalid Item provenance")
+
     source_item_id = item.id.removeprefix(prefix).removesuffix(suffix)
     if not source_item_id:
         raise ValueError("invalid Item provenance")
+
     return source_item_id
+
+
+def _processing_version(item: Item) -> str:
+    """Return this package's recorded Processing-extension software version."""
+    software = item.properties.get("processing:software")
+    if not isinstance(software, dict):
+        raise ValueError("invalid processing software")
+
+    processing_version = software.get(PACKAGE_NAME)
+    if not isinstance(processing_version, str) or not processing_version:
+        raise ValueError("invalid processing software")
+
+    return processing_version
 
 
 def _item_grid(item: Item) -> TileGrid:
@@ -370,10 +459,12 @@ def _item_grid(item: Item) -> TileGrid:
         transform = Affine(*(projection.transform or []))
         if epsg is None or len(shape) != 2 or min(shape) <= 0:
             raise ValueError("invalid projection metadata")
+
         bounds = tuple(float(value) for value in array_bounds(*shape, transform))
-        tile_id = str(item.properties["mgrs:tile"])
-    except (KeyError, TypeError, ValueError) as error:
+        tile_id = _item_tile_id(item)
+    except (TypeError, ValueError) as error:
         raise ValueError("invalid Item projection metadata") from error
+
     return TileGrid(
         tile_id=tile_id,
         epsg=epsg,
@@ -384,11 +475,26 @@ def _item_grid(item: Item) -> TileGrid:
     )
 
 
+def _mgrs_components(grid: TileGrid) -> tuple[str, str, int]:
+    """Return standard MGRS extension fields from an authoritative target grid."""
+    return grid.tile_id[-3], grid.tile_id[-2:], grid.epsg % 100
+
+
+def _item_tile_id(item: Item) -> str:
+    """Recover a standard 100 km MGRS tile ID from its extension metadata."""
+    mgrs = MgrsExtension.ext(item)
+    if mgrs.utm_zone is None or mgrs.latitude_band is None or mgrs.grid_square is None:
+        raise ValueError("invalid MGRS metadata")
+
+    return f"{mgrs.utm_zone:02d}{mgrs.latitude_band}{mgrs.grid_square}"
+
+
 def _local_asset_path(directory: Path, href: str) -> Path:
     """Resolve a required asset href and reject references outside its product leaf."""
     path = (directory / href).resolve()
     if directory.resolve() not in path.parents:
         raise ValueError(f"asset is not local to product: {href}")
+
     return path
 
 
@@ -432,9 +538,11 @@ def _clip_to_bounds(
                 clipped.append(start)
             if start_inside != end_inside:
                 clipped.append(intersect(start, end))
+
         polygon = clipped
         if not polygon:
             break
+
     return polygon
 
 
@@ -459,13 +567,16 @@ def _geometry_bbox(geometry: dict[str, Any]) -> list[float]:
     coordinates = geometry.get("coordinates")
     if geometry.get("type") != "Polygon" or not coordinates:
         raise ValueError("geometry must be a non-empty Polygon")
+
     points = [point for ring in coordinates for point in ring]
     if not points or any(len(point) < 2 for point in points):
         raise ValueError("geometry must contain coordinate pairs")
+
     longitude = [float(point[0]) for point in points]
     latitude = [float(point[1]) for point in points]
     if not all(math.isfinite(value) for value in [*longitude, *latitude]):
         raise ValueError("geometry coordinates must be finite")
+
     return [min(longitude), min(latitude), max(longitude), max(latitude)]
 
 

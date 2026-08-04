@@ -1,15 +1,15 @@
 """Authoritative MGRS target grids and GCP radar-window selection."""
 
-from dataclasses import dataclass
 import math
+from dataclasses import dataclass
 
+import numpy as np
 from affine import Affine
 from mgrs import MGRS
 from mgrs.core import MGRSError
-import numpy as np
 from pyproj import Transformer
-from rasterio.crs import CRS
 from rasterio.control import GroundControlPoint
+from rasterio.crs import CRS
 from rasterio.transform import GCPTransformer
 from rasterio.windows import Window
 
@@ -30,20 +30,24 @@ class TileGrid:
     shape: tuple[int, int]
 
 
-def target_grid(tile_id: str, resolution: float = RESOLUTION_METERS) -> TileGrid:
-    """Build the exact fixed UTM target grid for a standard MGRS tile."""
-    if resolution != RESOLUTION_METERS:
-        raise ValueError(f"resolution must be {RESOLUTION_METERS:g} m")
+def target_grid(tile_id: str) -> TileGrid:
+    """Build the exact fixed 25 m UTM target grid for a standard MGRS tile."""
     zone, hemisphere, xmin, ymin = MGRS_CONVERTER.MGRSToUTM(tile_id)
     epsg = (32600 if hemisphere == "N" else 32700) + zone
-    bounds = (float(xmin), float(ymin), float(xmin + MGRS_TILE_SIZE_METERS), float(ymin + MGRS_TILE_SIZE_METERS))
-    shape = (int(MGRS_TILE_SIZE_METERS / resolution),) * 2
+    bounds = (
+        float(xmin),
+        float(ymin),
+        float(xmin + MGRS_TILE_SIZE_METERS),
+        float(ymin + MGRS_TILE_SIZE_METERS),
+    )
+    shape = (int(MGRS_TILE_SIZE_METERS / RESOLUTION_METERS),) * 2
     return TileGrid(
         tile_id=tile_id,
         epsg=epsg,
         bounds=bounds,
         crs=CRS.from_epsg(epsg),
-        transform=Affine.translation(bounds[0], bounds[3]) * Affine.scale(resolution, -resolution),
+        transform=Affine.translation(bounds[0], bounds[3])
+        * Affine.scale(RESOLUTION_METERS, -RESOLUTION_METERS),
         shape=shape,
     )
 
@@ -79,7 +83,12 @@ def gcp_pixel_window(
     if not valid.any():
         return None
     rows, cols = rows[valid], cols[valid]
-    if rows.max() < 0 or cols.max() < 0 or rows.min() >= source_height or cols.min() >= source_width:
+    if (
+        rows.max() < 0
+        or cols.max() < 0
+        or rows.min() >= source_height
+        or cols.min() >= source_width
+    ):
         return None
 
     row_start = max(0, math.floor(rows.min()) - padding_pixels)
@@ -112,15 +121,25 @@ def shifted_gcps(
 def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
     west, south, east, north = bbox
     source_bounds = bbox
-    hemispheres = ("S", "N") if south < 0 < north else (("S",) if north <= 0 else ("N",))
+    hemispheres = (
+        ("S", "N") if south < 0 < north else (("S",) if north <= 0 else ("N",))
+    )
     tile_ids: set[str] = set()
     for zone in _intersecting_utm_zones(bbox):
         for hemisphere in hemispheres:
             epsg = (32600 if hemisphere == "N" else 32700) + zone
             to_utm = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
             xmin, ymin, xmax, ymax = to_utm.transform_bounds(*bbox, densify_pts=21)
-            for easting in range(max(100_000, math.floor(xmin / 100_000 - 1) * 100_000), min(900_000, math.floor(xmax / 100_000 + 1) * 100_000) + 1, 100_000):
-                for northing in range(max(0, math.floor(ymin / 100_000 - 1) * 100_000), min(9_900_000, math.floor(ymax / 100_000 + 1) * 100_000) + 1, 100_000):
+            for easting in range(
+                max(100_000, math.floor(xmin / 100_000 - 1) * 100_000),
+                min(900_000, math.floor(xmax / 100_000 + 1) * 100_000) + 1,
+                100_000,
+            ):
+                for northing in range(
+                    max(0, math.floor(ymin / 100_000 - 1) * 100_000),
+                    min(9_900_000, math.floor(ymax / 100_000 + 1) * 100_000) + 1,
+                    100_000,
+                ):
                     try:
                         tile_id = MGRS_CONVERTER.UTMToMGRS(
                             zone, hemisphere, easting, northing, MGRSPrecision=0
@@ -128,7 +147,9 @@ def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
                         grid = target_grid(tile_id)
                     except MGRSError:
                         continue
-                    if grid.epsg == epsg and _intersects(_wgs84_bounds(grid), source_bounds):
+                    if grid.epsg == epsg and _intersects(
+                        _wgs84_bounds(grid), source_bounds
+                    ):
                         tile_ids.add(tile_id)
     return sorted(tile_ids)
 
@@ -154,7 +175,12 @@ def _wgs84_bounds(grid: TileGrid) -> tuple[float, float, float, float]:
 def _intersects(
     first: tuple[float, float, float, float], second: tuple[float, float, float, float]
 ) -> bool:
-    return first[0] <= second[2] and first[2] >= second[0] and first[1] <= second[3] and first[3] >= second[1]
+    return (
+        first[0] <= second[2]
+        and first[2] >= second[0]
+        and first[1] <= second[3]
+        and first[3] >= second[1]
+    )
 
 
 def _densified_boundary(
