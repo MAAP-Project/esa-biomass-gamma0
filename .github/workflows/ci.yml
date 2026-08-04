@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Validate CWLs and test
+        run: |
+          set -euo pipefail
+          for mode in staged fetch; do
+            workflow="dps/$mode/esa-biomass-gamma0-$mode.cwl"
+            uvx --from cwltool cwltool --validate "$workflow"
+            uvx --with pyyaml --from ogc-ap-validator ap-validator --detail errors "$workflow"
+          done
+          uv run --frozen --group dev pytest
+
+  container:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - mode: staged
+            include_fetch: "false"
+          - mode: fetch
+            include_fetch: "true"
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and smoke-test ${{ matrix.mode }} image
+        run: |
+          set -euo pipefail
+          image="esa-biomass-gamma0-${{ matrix.mode }}"
+          docker build --build-arg INCLUDE_FETCH=${{ matrix.include_fetch }} --tag "$image" .
+          docker run --rm "$image" \
+            /app/esa-biomass-gamma0/dps/${{ matrix.mode }}/run.sh --help
+
+  publish-latest:
+    if: github.event_name == 'push'
+    needs: container
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - mode: staged
+            include_fetch: "false"
+          - mode: fetch
+            include_fetch: "true"
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and publish latest image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}-${{ matrix.mode }}:latest"
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker build --build-arg INCLUDE_FETCH=${{ matrix.include_fetch }} --tag "$image" .
+          docker push "$image"

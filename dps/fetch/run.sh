@@ -4,4 +4,4 @@ set -euo pipefail
 basedir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 root="$(cd "$basedir/../.." && pwd -P)"
 mkdir -p output
-UV_PROJECT="$root" uv run --frozen --no-dev --extra fetch "$basedir/run.py" "$@" --output-root output
+UV_PROJECT="$root" uv run --frozen --no-dev --no-sync --extra fetch "$basedir/run.py" "$@" --output-root output

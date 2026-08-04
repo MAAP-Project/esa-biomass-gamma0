@@ -1,18 +1,39 @@
 cwlVersion: v1.2
 
+$namespaces:
+  s: https://schema.org/
+$schemas:
+  - https://raw.githubusercontent.com/schemaorg/schemaorg/refs/heads/main/data/releases/9.0/schemaorg-current-http.rdf
+
+s:author:
+  - class: s:Organization
+    s:name: MAAP Project
+s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
+s:softwareVersion: 0.1.0 # x-release-please-version
+s:version: 0.1.0 # x-release-please-version
+s:keywords: [ESA, BIOMASS, Gamma0, MGRS]
+
 $graph:
   - class: Workflow
-    id: esa-biomass-gamma0-staged
+    id: esa_biomass_gamma0_staged
     label: ESA BIOMASS Gamma0 MGRS staged DPS
     doc: Create fixed-grid Gamma0 products from staged local BIOMASS source files.
     inputs:
       source_item:
+        label: Source STAC Item
+        doc: Staged source STAC Item JSON.
         type: File
       beta0_tiff:
+        label: Beta0 TIFF
+        doc: Staged four-band enclosure_tiff asset.
         type: File
       radiometry_lut:
+        label: Radiometry LUT
+        doc: Staged enclosure_nc radiometry LUT NetCDF.
         type: File
       annotation_xml:
+        label: Annotation XML
+        doc: Staged enclosure_annot_xml annotation asset.
         type: File
     outputs:
       output:
@@ -32,7 +53,7 @@ $graph:
     id: main
     requirements:
       DockerRequirement:
-        dockerPull: esa-biomass-gamma0:latest
+        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.0 # x-release-please-version
       NetworkAccess:
         networkAccess: false
       ResourceRequirement:

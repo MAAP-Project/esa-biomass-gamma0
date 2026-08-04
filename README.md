@@ -18,18 +18,28 @@ tile, it:
 4. Writes nine Cloud Optimized GeoTIFFs, a display-only RGB thumbnail, and STAC
    metadata.
 
-Two independently registered MAAP algorithms expose the same scientific product:
+Two registered MAAP algorithms expose the same scientific product:
 
-- `esa_biomass_gamma0_staged` accepts four staged source files and has no network
-  access or MAAP credentials.
-- `esa_biomass_gamma0_fetch` accepts one BIOMASS STAC Item ID, retrieves MAAP
-  secrets inside the job, materializes temporary local files, then delegates to
-  the same staged workflow.
+| Algorithm | Use it when | Inputs | Network access |
+| --- | --- | --- | --- |
+| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values | Disabled |
+| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string | Enabled only to materialize the source |
 
-## Usage
+Choose **staged** when another workflow has prepared the four files, or when the
+job must remain network-free. Choose **fetch** when submitting an Item ID is
+more convenient. Fetch retrieves MAAP-managed secrets inside the job, creates
+temporary local files, and runs the same staged processing workflow.
 
-Register `dps/staged/` as `esa_biomass_gamma0_staged` for sources already
-available as MAAP `File` inputs. It has the four source inputs below:
+## Submit a MAAP job
+
+The examples assume both algorithms are registered at version `v0.1.0`. The
+tracked CWLs in `dps/staged/` and `dps/fetch/` are the registered interfaces;
+[DEVELOPMENT.md](DEVELOPMENT.md) describes the release-managed deployment path.
+
+### Staged files
+
+Submit `esa_biomass_gamma0_staged` with the source files already available as
+MAAP `File` inputs:
 
 ```python
 from maap.maap import MAAP
@@ -47,9 +57,11 @@ job = maap.submitJob(
 )
 ```
 
-Register `dps/fetch/` as `esa_biomass_gamma0` when MAAP should retrieve
-the source. Configure these secrets once through MAAP, never as fetch-job
-inputs or environment variables:
+### Item-ID fetch
+
+Submit `esa_biomass_gamma0_fetch` when MAAP should retrieve the source. Configure
+these secrets once through MAAP, never as fetch-job inputs or environment
+variables:
 
 ```python
 from maap.maap import MAAP
@@ -61,7 +73,7 @@ job = maap.submitJob(
     identifier="biomass-gamma0-fetch-example",
     algo_id="esa_biomass_gamma0_fetch",
     version="v0.1.0",
-    queue="maap-dps-worker-8gb",
+    queue="<MAAP queue with at least 16 GB>",
     item_id="<BIOMASS L1B STAC Item ID>",
 )
 ```
@@ -70,9 +82,10 @@ Fetch calls `MAAP().secrets.get_secret` for those names only, enables network
 access only for materialization, and removes temporary source files on exit.
 Both algorithms return the same `./output` Directory.
 
-Use a queue available to your MAAP organization that meets the algorithm's 8 GB
-memory and four-core requirement. The job runs asynchronously; use the MAAP
-Jobs UI or `job.retrieve_attributes()` to monitor it.
+Use a queue available to your MAAP organization that meets the algorithm's
+resource request: staged requires 8 GB and four cores; fetch requires 16 GB and
+four cores. The job runs asynchronously; use the MAAP Jobs UI or
+`job.retrieve_attributes()` to monitor it.
 
 ### Local CLI
 
@@ -191,6 +204,16 @@ reference `enclosure_tiff`, `enclosure_nc`, and `enclosure_annot_xml` assets.
 It never accepts staged files, secret values, or a cache path.
 
 DPS jobs always produce fixed 25 m products and replace existing products.
+
+## Release deployment
+
+Release Please turns conventional commits merged to `main` into a reviewed
+release PR. Merging that PR creates the GitHub Release, publishes immutable
+version-tagged staged and fetch images, and registers or updates both MAAP
+processes. `latest` images from `main` are development-only and never appear in
+tracked CWLs or MAAP deployment. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
+required `RELEASE_PLEASE_TOKEN`, `MAAP_TOKEN`, GHCR visibility, and recovery
+procedure.
 
 ## Output
 

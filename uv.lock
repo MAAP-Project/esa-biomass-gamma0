@@ -529,11 +529,13 @@ wheels = [
 
 [[package]]
 name = "esa-biomass-gamma0"
-version = "0.1.0"
+version = "0.1.0" # x-release-please-version
 source = { editable = "." }
 dependencies = [
     { name = "mgrs" },
     { name = "netcdf4" },
+    { name = "packaging" },
+    { name = "pyproj" },
     { name = "pystac" },
     { name = "rasterio" },
     { name = "scipy" },
@@ -565,6 +567,8 @@ requires-dist = [
     { name = "mgrs", specifier = ">=1.5.4" },
     { name = "netcdf4", specifier = ">=1.7.4" },
     { name = "obstore", marker = "extra == 'fetch'", specifier = ">=0.11.0" },
+    { name = "packaging", specifier = ">=26.2" },
+    { name = "pyproj", specifier = ">=3.7.2" },
     { name = "pystac", specifier = ">=1.15.2" },
     { name = "pystac-client", marker = "extra == 'fetch'", specifier = ">=0.9.0" },
     { name = "rasterio", specifier = ">=1.5.0" },

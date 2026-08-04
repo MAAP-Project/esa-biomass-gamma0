@@ -135,7 +135,7 @@ The nine GeoTIFFs must be:
 - tagged with quantity, units, source Item ID, and processing version; and
 - tagged with polarization for Beta0 and Gamma0 assets.
 
-All nine COGs share CRS, bounds, transform, width, height, nodata, and baseline valid-footprint geometry where their source values are valid. Beta0 and Gamma0 use their corresponding quantity and unit metadata. GammaNought is a single-band calibration-factor asset. The PNG thumbnail is display-only, has three RGB bands, and does not replace a scientific asset or claim COG properties.
+All nine COGs share CRS, bounds, transform, width, height, and nodata. Their COG tags use `QUANTITY=beta0_amplitude`, `QUANTITY=gamma0_linear_intensity`, or `QUANTITY=gamma_nought_calibration_factor`, plus `UNITS=1`, source Item ID, processing version, and polarization where applicable. GammaNought is a single-band calibration-factor asset. The PNG thumbnail is display-only `uint8` RGB: Gamma0 HH, HV, and VV form red, green, and blue channels respectively, each stretched independently from its finite 2nd to 98th percentile. It does not replace a scientific asset or claim COG properties.
 
 Validate all COGs and the thumbnail before writing `item.json` and atomically promoting the staged directory.
 
@@ -150,11 +150,12 @@ relative `item` links to those valid leaf products. This recovers a complete
 product after an interrupted Catalog update.
 
 When no Item exists, write a valid empty Catalog. Product Items are standalone:
-they have no `collection` field or Collection link. Validate the Catalog and
-Items with PySTAC before reporting success. Use the Projection, Raster, SAR, and
-Processing extensions where fields are populated. The temporary Collection used
-by the PgSTAC loader declares MAAP Project as its processor, records the package
-under `processing:software`, and links its source repository with the
+they have no `collection` field or Collection link. Rebuilding removes a stale
+root `collection.json`. Validate the Catalog and Items with PySTAC before
+reporting success. Use the Projection, Raster, SAR, and Processing extensions
+where fields are populated. The temporary Collection used by the PgSTAC loader
+declares MAAP Project as its processor, records the package under
+`processing:software`, and links its source repository with the
 `processing-software` relation.
 
 ### Item identity and geometry
@@ -196,8 +197,8 @@ Required Item properties include:
 Use PySTAC's MGRS and SAR extensions for their standard fields and the
 Processing extension for software provenance. The full tile ID is the zero-padded
 `mgrs:utm_zone` followed by `mgrs:latitude_band` and `mgrs:grid_square`; it is
-not stored as a project-specific field. Copy source orbit, pass-direction, and
-processing-baseline fields only when available.
+not stored as a project-specific field. The current workflow does not copy
+source orbit, pass direction, or processing-baseline properties.
 
 Add a `derived_from` link to the sanitized input Item self HREF when available,
 sanitized `via` links to the Beta0 TIFF and radiometry NetCDF source URLs, and a
@@ -220,7 +221,7 @@ Each Item has nine scientific COG data assets and one display-only thumbnail:
 | `gamma0_lut` | `gamma0_lut.tif` | bilinearly resampled Gamma0 multiplicative factor | n/a | `data` |
 | `thumbnail` | `thumbnail.png` | display-only RGB composite | n/a | `thumbnail`, `overview` |
 
-Each scientific asset includes its media type, Projection extension fields, a one-band Raster extension entry, and SAR polarization metadata where applicable. Gamma0 raster-band metadata uses `float32`, `-9999.0` nodata, unit `1`, and a linear-intensity description. The thumbnail has image media type and RGB metadata but no scientific Raster or SAR claims.
+Each scientific asset includes its media type, Projection extension fields, a one-band Raster extension entry, and SAR polarization metadata where applicable. Raster-band metadata uses `float32`, `-9999.0` nodata, and unit `1`; the Gamma0 asset titles and COG quantity tags identify linear intensity. The thumbnail has image media type and thumbnail/overview roles; its PNG pixels carry RGB color interpretation but the STAC asset has no scientific Raster or SAR claims.
 
 ## Package and Runtime Interface
 
@@ -244,29 +245,38 @@ process-gamma0 staged \
 | `radiometry_lut` | Staged `enclosure_nc` file |
 | `annotation_xml` | Staged `enclosure_annot_xml` file |
 | `output_root` | Output directory, fixed to `./output` by the DPS wrapper |
-| `window_padding_pixels` | Internal radar-window safety margin for scientific tuning |
-| `processing_version` | Installed package version stored in COG and STAC metadata |
+| `window_padding_pixels` | Staged-CLI radar-window safety margin for scientific tuning; DPS wrappers use the default of 64 pixels |
+| `processing_version` | Internal `process_source` parameter, defaulting to the installed package version stored in COG and STAC metadata |
 
-Two MAAP application packages expose the modes: register `dps/staged/` as
-`esa_biomass_gamma0_staged` for the four staged `File` inputs, and register
-`dps/fetch/` as `esa_biomass_gamma0_fetch` for its `item_id` input. Both always
-produce 25 m products, expose no resolution or overwrite control, return
-`./output` as a `Directory`, and call the same local-file workflow. The staged
-CWL disables network access; the fetch CWL enables it.
+Two direct OGC Application Packages expose the modes:
+`dps/staged/esa-biomass-gamma0-staged.cwl` registers
+`esa_biomass_gamma0_staged` for the four staged `File` inputs, and
+`dps/fetch/esa-biomass-gamma0-fetch.cwl` registers
+`esa_biomass_gamma0_fetch` for its `item_id` input. Both always produce 25 m
+products, expose no resolution or overwrite control, return `./output` as a
+`Directory`, and call the same local-file workflow. The staged CWL disables
+network access; the fetch CWL enables it.
 
-Each descriptor directory has its own `build.sh`, `run.sh`, and thin `run.py`.
-Build scripts install frozen production environments with `uv sync --frozen
---no-dev`; fetch additionally selects the locked `fetch` extra. Each runtime
-wrapper selects the appropriate command from the same package Typer app,
-creates `./output`, and contains no scientific processing logic. The fetch
-command materializes temporary files and calls the staged workflow adapter
-directly, rather than reconstructing staged CLI arguments. The fetch runtime
-includes only the authentication, STAC-discovery, download, and MAAP-secret
-dependencies required to materialize
-the staged files; the staged runtime remains credential-free.
-The `local` command reuses the common materialization adapter and persistent
-cache for local Item-ID runs. `pyproject.toml` exposes the one `process-gamma0`
-entrypoint, and it and `uv.lock` remain the only dependency definition and lock.
+CWL is the sole deployment contract. Release Please turns conventional commits
+on `main` into a reviewed release PR, updating the package version and annotated
+release fields in the repository-owned CWLs. Its GitHub Release validates those
+CWLs, builds separate immutable staged and fetch GHCR images, then registers or
+updates both release-commit-pinned raw CWL URLs at the MAAP production OGC
+Processes endpoint. `latest` images from `main` are development-only and never
+appear in a CWL. There is no legacy MAAP descriptor or package-build path.
+
+Each CWL calls a thin `run.sh` and `run.py` adapter. The image build installs
+its frozen production environment from `pyproject.toml` and `uv.lock`; fetch
+selects the locked `fetch` extra. Each runtime wrapper selects the appropriate
+command from the same package Typer app, creates `./output`, and contains no
+scientific processing logic. The fetch command materializes temporary files and
+calls the staged workflow adapter directly, rather than reconstructing staged
+CLI arguments. The fetch runtime includes only the authentication,
+STAC-discovery, download, and MAAP-secret dependencies required to materialize
+the staged files; the staged runtime remains credential-free. The `local`
+command reuses the common materialization adapter and persistent cache for local
+Item-ID runs. `pyproject.toml` exposes the one `process-gamma0` entrypoint, and
+it and `uv.lock` remain the only dependency definition and lock.
 
 ### Local eoAPI integration
 
@@ -285,11 +295,12 @@ extra to match the bundled PgSTAC image.
 ## Failure Handling and Idempotency
 
 - Fail the source run for missing or invalid staged inputs, source metadata, GCPs, LUT coordinates, annotation values, or acquisition time.
-- Skip and log a candidate when GCP back-projection finds no overlap or a scientific warp is all nodata.
+- Skip a candidate when GCP back-projection finds no overlap or a scientific warp is all nodata.
+- For an unexpected per-tile processing error, log the failure, retain its identifiable temporary directory for cleanup, continue with remaining candidates, and return a failed run status.
 - Stage a leaf product in a sibling temporary directory. Promote it only after nine COGs, the thumbnail, and `item.json` validate.
 - Build a complete replacement before replacing an existing valid predecessor.
 - Do not register incomplete directories. Leave identifiable temporary directories for cleanup.
-- Rebuild root STAC files from valid leaf products after each source run. A subsequent run repairs stale registration after an interruption.
+- Rebuild the root Catalog from valid leaf products after each source run. A subsequent run repairs stale registration after an interruption.
 
 ## Validation and Testing Strategy
 
@@ -299,9 +310,9 @@ extra to match the bundled PgSTAC image.
 - MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries using only the source bbox.
 - Synthetic GCP tests cover boundary densification, acceptance, rejection, padding, clipping, non-finite mappings, and local-GCP shifting.
 - Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
-- Raster tests use real temporary files to validate direct warps, nine single-band COGs, thumbnail structure, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
+- Raster tests use real temporary files to validate direct warps, nine single-band COGs, the HH/HV/VV 2nd-to-98th-percentile RGB thumbnail, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
 - STAC tests validate Item geometry fallback, all ten assets, source links, time, projection/raster/SAR metadata, Catalog rebuild, empty results, replacement safety, and recovery after stale registration.
-- DPS contract tests validate each algorithm's metadata, CWL, shell wrapper, and public inputs; they assert that staged execution has no network or credential configuration, fetch execution permits network access, and both converge on the same local-file workflow.
+- DPS contract tests validate each tracked CWL, shell wrapper, and public inputs; they assert that staged execution has no network or credential configuration, fetch execution permits network access, and both converge on the same local-file workflow. Release CI also validates OGC metadata, image-tag/version parity, and the deployment request path.
 
 ### Scientific validation gates
 
@@ -334,14 +345,14 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while GCP overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environments from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution across both MAAP packages. |
-| DPS input modes | Separate staged-files and Item-ID fetch algorithms | Distinct schemas and network policies keep the no-network scientific boundary explicit. |
+| DPS input modes | Separate hand-maintained staged-files and Item-ID fetch CWLs | Distinct schemas and network policies keep the no-network scientific boundary explicit. |
 | Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |
 | Empty source result | Valid empty Catalog | A source can have no GCP-overlapping candidates while the DPS output contract still requires root STAC files. |
+| OGC deployment | GitHub Release validates, builds, and updates the two hand-maintained CWLs | CWL stays reviewable in source control without a generator committing derived files. |
 
 ## Open Questions
 
 - Which source STAC fields reliably contain BIOMASS instrument mode, orbit/pass direction, and processing baseline?
-- Which documented Gamma0 polarization mapping, scaling, and image encoding should produce `thumbnail.png`?
 - What storage prefix and publication target will host the local Catalog after local processing?
 
 ## References

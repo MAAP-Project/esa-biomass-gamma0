@@ -100,23 +100,23 @@ accepts an AOI or study-vector input.
 
 ## OGC Application Package structure
 
-Follow the wrapper shape of sibling `../esa-biomass-dps`; `dps/staged/` and
-`dps/fetch/` are independently registered MAAP package directories:
+Use direct OGC deployment. The two repository-owned CWLs are the sole MAAP
+interfaces and release CI independently registers them:
 
 ```text
 dps/
-  staged/                         # network-free staged-file MAAP package
-    algorithm.yml
+  staged/                         # network-free staged-file OGC package
     esa-biomass-gamma0-staged.cwl
-    build.sh
     run.py
     run.sh
-  fetch/                          # Item-ID MAAP package with network access
-    algorithm.yml
+  fetch/                          # Item-ID OGC package with network access
     esa-biomass-gamma0-fetch.cwl
-    build.sh
     run.py
     run.sh
+.github/workflows/ci.yml          # validates PRs; publishes development latest images
+.github/workflows/release-please.yml # creates release PRs and GitHub Releases
+.github/workflows/release.yml     # validates, publishes tagged images, deploys CWLs
+Dockerfile                        # builds staged/fetch images by build argument
 src/esa_biomass_gamma0/          # reusable production workflow package
   calibration.py
   cli.py
@@ -131,7 +131,9 @@ tests/                            # deterministic synthetic tests
 main.py                           # retained diagnostic reference
 ```
 
-Do not duplicate processing logic across `run.sh`, `run.py`, CWL, notebooks, or
+Register `dps/staged/esa-biomass-gamma0-staged.cwl` and
+`dps/fetch/esa-biomass-gamma0-fetch.cwl` as separate MAAP processes. Do not
+duplicate processing logic across `run.sh`, `run.py`, CWL, notebooks, or
 `main.py`. Shell and CWL files adapt runtime inputs only; package Python owns
 the workflow. `esa_biomass_gamma0_staged` uses `source_item`, `beta0_tiff`,
 `radiometry_lut`, and `annotation_xml`; the four paths stage as OGC `File`
@@ -141,10 +143,11 @@ overwrite control. Both CWL files return `./output` as a `Directory`; staged
 disables network access and fetch enables it.
 
 `pyproject.toml` and `uv.lock` are the sole production dependency definition and
-lock. Both `build.sh` files use `uv sync --frozen --no-dev`; both `run.sh` files
-use `uv run --frozen --no-dev`, with fetch selecting the locked `fetch` extra.
-Do not add conda manifests, a second package manager, or a bespoke execution
-framework.
+lock. The Docker image build uses `uv sync --frozen --no-dev`; the fetch image
+selects the locked `fetch` extra. Both `run.sh` files use `uv run --frozen
+--no-dev`, with fetch selecting that extra. Do not add legacy `algorithm.yml`
+descriptors, package-build scripts, conda manifests, a second package manager,
+or a bespoke execution framework.
 
 ## Guardrails
 
@@ -162,8 +165,11 @@ framework.
   grid.
 - Do not combine tiles in different UTM CRSs into a common stack in this POC.
 - Never hard-code or commit secrets. The production package requires no MAAP
-  credentials. A local staging adapter must not place credentials or signed URLs
-  in logs, config, COG tags, STAC JSON, or provenance.
+  credentials. Release Please reads `RELEASE_PLEASE_TOKEN` only from GitHub
+  Actions secrets; deployment CI reads `MAAP_TOKEN` only from GitHub Actions
+  secrets; the fetch runtime reads its MAAP secrets at job time. A local staging
+  adapter must not place credentials or signed URLs in logs, config, COG tags,
+  STAC JSON, or provenance.
 - Use temporary leaf directories and atomic promotion. Keep incomplete outputs
   unregistered and identifiable for cleanup.
 - Retain runnable shape, nodata, target-grid, and LUT-alignment assertions.
