@@ -529,7 +529,7 @@ wheels = [
 
 [[package]]
 name = "esa-biomass-gamma0"
-version = "0.1.0" # x-release-please-version
+version = "0.0.0" # x-release-please-version
 source = { editable = "." }
 dependencies = [
     { name = "mgrs" },

@@ -9,6 +9,7 @@ import pytest
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 
+from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
 from esa_biomass_gamma0.grids import TileGrid
 from esa_biomass_gamma0.raster import (
     POLARIZATIONS,
@@ -165,7 +166,7 @@ def test_rejects_invalid_staged_arrays_before_writing_assets(tmp_path: Path) -> 
             gamma0[:, :-1],
             gamma_nought,
             source_item_id="BIOMASS_TEST_001",
-            processing_version="0.1.0",
+            processing_version=PACKAGE_VERSION,
         )
 
     assert not list(directory.iterdir())
@@ -187,7 +188,7 @@ def test_writes_and_validates_nine_shared_grid_cogs_and_rgb_thumbnail(
         gamma0,
         gamma_nought,
         source_item_id="BIOMASS_TEST_001",
-        processing_version="0.1.0",
+        processing_version=PACKAGE_VERSION,
     )
     import rasterio
 

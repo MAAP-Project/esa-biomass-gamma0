@@ -13,6 +13,7 @@ from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 
+from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
 from esa_biomass_gamma0.grids import TileGrid
 from esa_biomass_gamma0.raster import write_scientific_cogs, write_thumbnail
 from esa_biomass_gamma0.source import validate_staged_source
@@ -77,7 +78,7 @@ def _product(
         gamma0,
         gamma_nought,
         source_item_id=source.item_id,
-        processing_version="0.1.0",
+        processing_version=PACKAGE_VERSION,
     )
     write_thumbnail(directory / "thumbnail.png", gamma0)
     return directory, source, grid
@@ -99,7 +100,7 @@ def test_builds_a_valid_item_for_complete_local_assets(
         source,
         grid,
         directory,
-        processing_version="0.1.0",
+        processing_version=PACKAGE_VERSION,
         geometry=source_footprint(grid, gcps, grid.crs, 10, 10),
     )
     write_item(item, directory / "item.json")
@@ -131,7 +132,9 @@ def test_builds_a_valid_item_for_complete_local_assets(
         Polarization.VV,
     ]
     assert sar.product_type == "Gamma0"
-    assert item.properties["processing:software"] == {"esa-biomass-gamma0": "0.1.0"}
+    assert item.properties["processing:software"] == {
+        "esa-biomass-gamma0": PACKAGE_VERSION
+    }
     assert "processing:level" not in item.properties
     assert item.get_links("processing-software")[0].target == (
         "https://github.com/MAAP-Project/esa-biomass-gamma0"
@@ -159,9 +162,9 @@ def test_builds_a_valid_item_for_complete_local_assets(
     item.validate()
     assert is_complete_product(directory)
     assert (
-        build_item(source, grid, directory, processing_version="0.1.0").properties[
-            "maap:partial_coverage"
-        ]
+        build_item(
+            source, grid, directory, processing_version=PACKAGE_VERSION
+        ).properties["maap:partial_coverage"]
         is True
     )
 
@@ -175,7 +178,7 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
     assert not (tmp_path / "collection.json").exists()
 
     directory, source, grid = _product(tmp_path, staged_paths)
-    item = build_item(source, grid, directory, processing_version="0.1.0")
+    item = build_item(source, grid, directory, processing_version=PACKAGE_VERSION)
     write_item(item, directory / "item.json")
     other_directory, _, other_grid = _product(
         tmp_path,
@@ -183,7 +186,7 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
         _grid("32TQS", (700_000.0, 5_100_000.0, 700_250.0, 5_100_250.0)),
     )
     other_item = build_item(
-        source, other_grid, other_directory, processing_version="0.1.0"
+        source, other_grid, other_directory, processing_version=PACKAGE_VERSION
     )
     write_item(other_item, other_directory / "item.json")
     (tmp_path / "collection.json").write_text("obsolete", encoding="utf-8")
@@ -214,7 +217,7 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
         "gamma0-correction-factor",
     }
     assert collection.providers[0].extra_fields["processing:software"] == {
-        "esa-biomass-gamma0": "0.1.0"
+        "esa-biomass-gamma0": PACKAGE_VERSION
     }
     assert collection.get_links("processing-software")[0].target == (
         "https://github.com/MAAP-Project/esa-biomass-gamma0"
