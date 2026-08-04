@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tomllib
 
+import click
 import yaml
 
 ROOT = Path(__file__).parents[1]
@@ -107,7 +108,7 @@ def test_shell_wrappers_use_mode_specific_frozen_uv_runtimes(tmp_path: Path) -> 
         assert run.returncode == 0
         assert (tmp_path / "output").is_dir()
         expected_flag = "--source-item" if mode == "staged" else "item_id"
-        assert expected_flag in run.stdout
+        assert expected_flag in click.unstyle(run.stdout)
         runner = (directory / "run.sh").read_text(encoding="utf-8")
         assert "uv run --frozen --no-dev" in runner
         assert ("--extra fetch" in runner) is (mode == "fetch")

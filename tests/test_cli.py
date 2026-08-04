@@ -4,6 +4,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import sys
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -177,7 +178,7 @@ def test_staged_command_rejects_invalid_inputs_before_processing(
     result = runner.invoke(cli.app, ["staged", *_arguments(staged_paths), *arguments])
 
     assert result.exit_code == 2
-    assert expected in result.output
+    assert expected in click.unstyle(result.output)
 
 
 def test_cli_help_and_errors_do_not_expose_credentials(
@@ -241,7 +242,7 @@ def test_fetch_command_rejects_staged_inputs_without_importing_maap() -> None:
     )
 
     assert result.exit_code == 2
-    assert "--source-item" in result.output
+    assert "--source-item" in click.unstyle(result.output)
     assert "maap" not in sys.modules
 
 
