@@ -8,9 +8,9 @@ import tomllib
 import yaml
 
 ROOT = Path(__file__).parents[1]
-PACKAGE_VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())[
-    "project"
-]["version"]
+PACKAGE_VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"][
+    "version"
+]
 STAGED_INPUTS = {
     "source_item": "File",
     "beta0_tiff": "File",
@@ -148,9 +148,7 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert f'version = "{PACKAGE_VERSION}" # x-release-please-version' in lock
 
     for mode in CONTRACTS:
-        text = (
-            ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl"
-        ).read_text()
+        text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
         assert text.count("x-release-please-version") == 3
         assert (
             f"dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v"
@@ -188,15 +186,32 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     """A published release validates, publishes, then updates the two OGC processes."""
     workflow = _load_yaml(ROOT / ".github" / "workflows" / "release.yml")
     release = workflow[True]["release"]
+    validation = workflow["jobs"]["validate"]
     deploy = workflow["jobs"]["deploy"]
     deploy_script = deploy["steps"][-1]["run"]
+    scientific_gate = next(
+        step
+        for step in validation["steps"]
+        if step.get("name") == "Validate recorded scientific evidence"
+    )
 
     assert release == {"types": ["published"]}
+    assert validation["permissions"] == {"contents": "read"}
+    assert scientific_gate["env"] == {
+        "RELEASE_TAG": "${{ github.event.release.tag_name }}"
+    }
+    assert "validate_scientific_validation.py" in scientific_gate["run"]
+    assert "MAAP_TOKEN" not in str(validation)
     assert workflow["env"]["MAAP_OGC_PROCESSES_URL"] == (
         "https://api.maap-project.org/api/ogc/processes"
     )
     assert workflow["jobs"]["publish"]["needs"] == "validate"
     assert deploy["needs"] == "publish"
+    assert validation["steps"].index(scientific_gate) < next(
+        index
+        for index, step in enumerate(validation["steps"])
+        if step.get("name") == "Validate release metadata and CWL"
+    )
     assert deploy["environment"] == "production"
     assert "MAAP_TOKEN" in deploy_script
     assert "esa-biomass-gamma0-staged.cwl" in deploy_script

@@ -51,7 +51,6 @@ def _arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     beta0[:, :2, :2] = np.nan
     gamma0 = beta0**2 * 0.5
     gamma_nought = np.full((10, 10), 0.5, dtype="float32")
-    gamma_nought[:2, :2] = np.nan
     return beta0, gamma0, gamma_nought
 
 
@@ -230,6 +229,16 @@ def test_writes_and_validates_nine_shared_grid_cogs_and_rgb_thumbnail(
             reference_mask = datasets[0].read_masks(1).copy()
             assert all(
                 (dataset.read_masks(1) == reference_mask).all() for dataset in datasets
+            )
+            assert all(
+                (dataset.read(1)[:2, :2] == -9999.0).all() for dataset in datasets
+            )
+            np.testing.assert_array_equal(datasets[0].read(1)[2:, 2:], beta0[0, 2:, 2:])
+            np.testing.assert_array_equal(
+                datasets[4].read(1)[2:, 2:], gamma0[0, 2:, 2:]
+            )
+            np.testing.assert_array_equal(
+                datasets[8].read(1)[2:, 2:], gamma_nought[2:, 2:]
             )
         assert datasets[0].tags()["QUANTITY"] == "beta0_amplitude"
         assert datasets[0].tags()["POLARIZATION"] == "HH"

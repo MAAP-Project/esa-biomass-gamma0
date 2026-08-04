@@ -65,6 +65,10 @@ def write_scientific_cogs(
     beta0, gamma0, gamma_nought = _validated_scientific_arrays(
         beta0, gamma0, gamma_nought
     )
+    baseline_valid = np.isfinite(beta0).all(axis=0)
+    beta0 = np.where(baseline_valid, beta0, np.nan)
+    gamma0 = np.where(baseline_valid, gamma0, np.nan)
+    gamma_nought = np.where(baseline_valid, gamma_nought, np.nan)
 
     if beta0.shape[-2:] != grid.shape:
         raise ValueError("scientific array shape does not match the target grid")

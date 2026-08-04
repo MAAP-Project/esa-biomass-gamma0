@@ -28,12 +28,18 @@ version, frozen `uv.lock` package entry, both annotated hand-maintained CWLs,
 and `CHANGELOG.md`. Review that PR like any other change. Merging it creates a `v<package-version>` GitHub
 Release, which triggers [the deployment workflow](.github/workflows/release.yml):
 
-1. it checks out the release tag and verifies the package/CWL/image-tag contract;
-2. it validates both CWLs and runs the test suite;
+1. it checks out the release tag and verifies the recorded MAAP-backed scientific evidence;
+2. it verifies the package/CWL/image-tag contract, validates both CWLs, and runs the test suite;
 3. it publishes immutable staged and fetch `v<version>` images; and
 4. it registers each release-commit-pinned raw CWL URL at
    `https://api.maap-project.org/api/ogc/processes`, updating an existing process
    when MAAP returns HTTP 409.
+
+Before merging a Release Please PR, add the matching versioned record described
+in [`dev-docs/scientific-validation/README.md`](dev-docs/scientific-validation/README.md).
+The gate runs without MAAP credentials and blocks image publication and
+registration when the record is missing, stale, malformed, has a non-passing
+positional check, or reports a Gamma0 difference of `>= 1e-3`.
 
 Set `RELEASE_PLEASE_TOKEN` as a fine-grained repository token with Contents and
 Pull requests read/write access. It lets Release Please create the GitHub Release
