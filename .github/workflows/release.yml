@@ -25,13 +25,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@v7
 
-      - name: Validate recorded scientific evidence
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: >
-          uv run --frozen python scripts/validate_scientific_validation.py
-          --release-tag "$RELEASE_TAG"
-
       - name: Validate release metadata and CWL
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}

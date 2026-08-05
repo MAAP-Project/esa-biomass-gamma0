@@ -211,11 +211,9 @@ Release Please turns conventional commits merged to `main` into a reviewed
 release PR. Merging that PR creates the GitHub Release, publishes immutable
 version-tagged staged and fetch images, and registers or updates both MAAP
 processes. `latest` images from `main` are development-only and never appear in
-tracked CWLs or MAAP deployment. A tagged release also requires a passing,
-version-matched MAAP-backed scientific-validation record before it can publish
-images or register MAAP processes. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
-required `RELEASE_PLEASE_TOKEN`, `MAAP_TOKEN`, GHCR visibility, validation
-record, and recovery procedure.
+tracked CWLs or MAAP deployment. See [DEVELOPMENT.md](DEVELOPMENT.md) for the
+required `RELEASE_PLEASE_TOKEN`, `MAAP_TOKEN`, GHCR visibility, and recovery
+procedure.
 
 ## Output
 

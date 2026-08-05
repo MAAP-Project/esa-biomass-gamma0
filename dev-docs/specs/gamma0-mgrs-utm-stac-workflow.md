@@ -318,7 +318,7 @@ extra to match the bundled PgSTAC image.
 
 Before release promotion, compare windowed LUT sampling with the full-frame diagnostic reference for one granule. Valid-pixel Gamma0 differences must remain below `1e-3` after matching calculation and resampling conventions.
 
-Inspect one swath-edge tile and one swath-interior tile against independent map features and the intended spectral dataset. Record positional residuals and the GDAL transformer and bilinear-resampling settings. Before a production GitHub Release, commit the matching aggregate record at `dev-docs/scientific-validation/v<version>.json`; the release gate rejects missing, version-mismatched, non-passing, or `>= 1e-3` evidence before image publication or MAAP registration. The record contains no source URLs or credentials.
+Inspect one swath-edge tile and one swath-interior tile against independent map features and the intended spectral dataset. Record positional residuals and the GDAL transformer and bilinear-resampling settings.
 
 ## Migration Path
 
