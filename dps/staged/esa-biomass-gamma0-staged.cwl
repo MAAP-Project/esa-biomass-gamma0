@@ -9,8 +9,8 @@ s:author:
   - class: s:Organization
     s:name: MAAP Project
 s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
-s:softwareVersion: 0.1.0 # x-release-please-version
-s:version: 0.1.0 # x-release-please-version
+s:softwareVersion: 0.1.0
+s:version: 0.1.0
 s:keywords: [ESA, BIOMASS, Gamma0, MGRS]
 
 $graph:
@@ -53,12 +53,12 @@ $graph:
     id: main
     requirements:
       DockerRequirement:
-        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.0 # x-release-please-version
+        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.0
       NetworkAccess:
-        networkAccess: false
+        networkAccess: true
       ResourceRequirement:
-        ramMin: 8
-        coresMin: 4
+        ramMin: 16
+        coresMin: 8
         outdirMax: 20
     baseCommand: /app/esa-biomass-gamma0/dps/staged/run.sh
     successCodes: [0]

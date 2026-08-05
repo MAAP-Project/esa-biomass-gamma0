@@ -144,13 +144,21 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert {
         path: entry["type"] for path, entry in extra_files_by_path.items()
     } == {
-        "dps/staged/esa-biomass-gamma0-staged.cwl": "generic",
-        "dps/fetch/esa-biomass-gamma0-fetch.cwl": "generic",
+        "dps/staged/esa-biomass-gamma0-staged.cwl": "yaml",
+        "dps/fetch/esa-biomass-gamma0-fetch.cwl": "yaml",
         "examples/stac/collection.json": "json",
         "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json": "json",
         "uv.lock": "generic",
     }
+    for mode in CONTRACTS:
+        cwl_path = f"dps/{mode}/esa-biomass-gamma0-{mode}.cwl"
+        assert [
+            entry["jsonpath"]
+            for entry in extra_files
+            if entry["path"] == cwl_path
+        ] == ["$['s:softwareVersion']", "$['s:version']"]
+
     assert extra_files_by_path["examples/stac/collection.json"]["jsonpath"] == (
         '$.providers[*]["processing:software"]["esa-biomass-gamma0"]'
     )
@@ -159,22 +167,32 @@ def test_release_please_owns_versioned_release_files() -> None:
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
     ]["jsonpath"] == '$.properties["processing:software"]["esa-biomass-gamma0"]'
     assert workflow[True]["push"] == {"branches": ["main"]}
-    release_step = workflow["jobs"]["release-please"]["steps"][0]
+    release_step, checkout_step, sync_step = workflow["jobs"]["release-please"]["steps"]
+    assert release_step["id"] == "release-please"
     assert release_step["uses"].startswith(
         "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7"
     )
     assert release_step["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
     assert "GITHUB_TOKEN" not in str(release_step)
+    assert checkout_step["if"] == (
+        "steps.release-please.outputs.prs_created == 'true'"
+    )
+    assert checkout_step["with"]["ref"] == (
+        "${{ fromJSON(steps.release-please.outputs.pr).headBranchName }}"
+    )
+    assert sync_step["if"] == checkout_step["if"]
+    assert "release-please-manifest.json" in sync_step["run"]
+    assert "git push origin HEAD:$branch" in sync_step["run"]
 
     lock = (ROOT / "uv.lock").read_text()
     assert f'version = "{PACKAGE_VERSION}" # x-release-please-version' in lock
 
     for mode in CONTRACTS:
         text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
-        assert text.count("x-release-please-version") == 3
+        assert "x-release-please-version" not in text
         assert (
             f"dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v"
-            f"{PACKAGE_VERSION} # x-release-please-version"
+            f"{PACKAGE_VERSION}"
         ) in text
 
 

@@ -12,6 +12,7 @@ concurrency:
 
 env:
   MAAP_OGC_PROCESSES_URL: https://api.maap-project.org/api/ogc/processes
+  MAAP_OGC_DEPLOYMENT_JOBS_URL: https://api.maap-project.org/api/ogc/deploymentJobs
 
 jobs:
   validate:
@@ -35,9 +36,9 @@ jobs:
           grep -Fx "version = \"$version\"" pyproject.toml
           for mode in staged fetch; do
             workflow="dps/$mode/esa-biomass-gamma0-$mode.cwl"
-            grep -Fqx "s:softwareVersion: $version # x-release-please-version" "$workflow"
-            grep -Fqx "s:version: $version # x-release-please-version" "$workflow"
-            grep -Fqx "        dockerPull: ghcr.io/${GITHUB_REPOSITORY,,}-$mode:$RELEASE_TAG # x-release-please-version" "$workflow"
+            grep -Fqx "s:softwareVersion: $version" "$workflow"
+            grep -Fqx "s:version: $version" "$workflow"
+            grep -Fqx "        dockerPull: ghcr.io/${GITHUB_REPOSITORY,,}-$mode:$RELEASE_TAG" "$workflow"
             uvx --from cwltool cwltool --validate "$workflow"
             uvx --with pyyaml --from ogc-ap-validator ap-validator --detail errors "$workflow"
           done
@@ -127,16 +128,76 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           }
 
+          wait_for_deployment() {
+            local workflow="$1"
+            local response="$2"
+            local headers="$3"
+            local deployment_url
+            local deployment_status
+            local status_response="$responses/$(basename "$workflow").deployment-status.json"
+            local deadline=$((SECONDS + 1800))
+
+            deployment_url="$(jq --raw-output '
+              .processPipelineLink.href //
+              .additionalProperties.processPipelineLink.href //
+              .deploymentJobLink.href //
+              empty
+            ' "$response")"
+            if [ -z "$deployment_url" ]; then
+              deployment_url="$(awk 'BEGIN { IGNORECASE = 1 } /^location:/ { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit }' "$headers")"
+            fi
+            if [ -z "$deployment_url" ]; then
+              echo "MAAP returned HTTP 202 for $workflow without a deployment-status URL" >&2
+              return 1
+            fi
+            case "$deployment_url" in
+              http://*|https://*) ;;
+              /*) deployment_url="https://api.maap-project.org$deployment_url" ;;
+              *) deployment_url="$MAAP_OGC_DEPLOYMENT_JOBS_URL/$deployment_url" ;;
+            esac
+
+            while :; do
+              curl --fail-with-body --silent --show-error --output "$status_response" \
+                --header "proxy-ticket: $MAAP_TOKEN" \
+                "$deployment_url"
+              deployment_status="$(jq --raw-output '
+                .status // .state // .deploymentStatus // .additionalProperties.status // empty
+              ' "$status_response" | tr '[:upper:]' '[:lower:]')"
+
+              case "$deployment_status" in
+                success|successful|succeeded|complete|completed|deployed)
+                  printf 'MAAP deployment for %s succeeded: %s\n' "$workflow" "$deployment_status"
+                  printf -- '- Deployment status: %s\n' "$deployment_status" >> "$GITHUB_STEP_SUMMARY"
+                  return 0
+                  ;;
+                failed|failure|error|dismissed|cancelled|canceled)
+                  echo "MAAP deployment failed for $workflow: $deployment_status" >&2
+                  return 1
+                  ;;
+                *)
+                  if [ "$SECONDS" -ge "$deadline" ]; then
+                    echo "MAAP deployment timed out for $workflow; last status: ${deployment_status:-missing}" >&2
+                    return 1
+                  fi
+                  printf 'MAAP deployment for %s is %s; polling again in 10 seconds\n' \
+                    "$workflow" "${deployment_status:-unknown}"
+                  sleep 10
+                  ;;
+              esac
+            done
+          }
+
           deploy() {
             local workflow="$1"
             local response="$responses/$(basename "$workflow").json"
+            local headers="$responses/$(basename "$workflow").headers"
             local workflow_url="https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$commit_sha/$workflow"
             local payload
             local process_id
             local status
 
             payload="{\"executionUnit\":{\"href\":\"$workflow_url\"}}"
-            status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            status="$(curl --silent --show-error --dump-header "$headers" --output "$response" --write-out '%{http_code}' \
               --request POST \
               --header "Content-Type: application/json" \
               --header "proxy-ticket: $MAAP_TOKEN" \
@@ -145,7 +206,7 @@ jobs:
 
             if [ "$status" = "409" ]; then
               process_id="$(jq --exit-status --raw-output '.additionalProperties.processID' "$response")"
-              status="$(curl --fail-with-body --silent --show-error --output "$response" --write-out '%{http_code}' \
+              status="$(curl --fail-with-body --silent --show-error --dump-header "$headers" --output "$response" --write-out '%{http_code}' \
                 --request PUT \
                 --header "Content-Type: application/json" \
                 --header "proxy-ticket: $MAAP_TOKEN" \
@@ -158,6 +219,8 @@ jobs:
             else
               log_response "$workflow" "registered" "$status" "$response"
             fi
+
+            [ "$status" != "202" ] || wait_for_deployment "$workflow" "$response" "$headers"
           }
 
           deploy dps/staged/esa-biomass-gamma0-staged.cwl
