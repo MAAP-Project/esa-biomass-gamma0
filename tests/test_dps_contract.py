@@ -223,6 +223,9 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     assert "esa-biomass-gamma0-fetch.cwl" in deploy_script
     assert "--request POST" in deploy_script
     assert "--request PUT" in deploy_script
+    assert "processPipelineLink.href" in deploy_script
+    assert "GITHUB_STEP_SUMMARY" in deploy_script
+    assert 'cat "$response"' not in deploy_script
     assert "latest" not in workflow["jobs"]["publish"]["steps"][-1]["with"]["tags"]
     assert "latest" not in deploy_script
     for job in workflow["jobs"].values():

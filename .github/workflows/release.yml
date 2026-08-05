@@ -103,6 +103,30 @@ jobs:
           responses="$(mktemp -d)"
           trap 'rm -rf "$responses"' EXIT
 
+          log_response() {
+            local workflow="$1"
+            local action="$2"
+            local status="$3"
+            local response="$4"
+            local process_id
+            local pipeline_link
+
+            process_id="$(jq --raw-output '.processID // .additionalProperties.processID // .id // empty' "$response" 2>/dev/null || true)"
+            pipeline_link="$(jq --raw-output '.processPipelineLink.href // empty' "$response" 2>/dev/null || true)"
+
+            printf 'MAAP %s %s: HTTP %s' "$workflow" "$action" "$status"
+            [ -z "$process_id" ] || printf ', process ID %s' "$process_id"
+            [ -z "$pipeline_link" ] || printf ', pipeline %s' "$pipeline_link"
+            printf '\n'
+
+            {
+              printf '### MAAP registration: `%s`\n\n' "$workflow"
+              printf -- '- Action: %s\n- HTTP status: %s\n' "$action" "$status"
+              [ -z "$process_id" ] || printf -- '- Process ID: `%s`\n' "$process_id"
+              [ -z "$pipeline_link" ] || printf -- '- Pipeline: %s\n' "$pipeline_link"
+            } >> "$GITHUB_STEP_SUMMARY"
+          }
+
           deploy() {
             local workflow="$1"
             local response="$responses/$(basename "$workflow").json"
@@ -121,15 +145,18 @@ jobs:
 
             if [ "$status" = "409" ]; then
               process_id="$(jq --exit-status --raw-output '.additionalProperties.processID' "$response")"
-              curl --fail-with-body --silent --show-error \
+              status="$(curl --fail-with-body --silent --show-error --output "$response" --write-out '%{http_code}' \
                 --request PUT \
                 --header "Content-Type: application/json" \
                 --header "proxy-ticket: $MAAP_TOKEN" \
                 --data "$payload" \
-                "$MAAP_OGC_PROCESSES_URL/$process_id" >/dev/null
+                "$MAAP_OGC_PROCESSES_URL/$process_id")"
+              log_response "$workflow" "updated" "$status" "$response"
             elif [ "$status" != "200" ] && [ "$status" != "201" ] && [ "$status" != "202" ]; then
               echo "MAAP registration failed for $workflow with HTTP $status" >&2
               return 1
+            else
+              log_response "$workflow" "registered" "$status" "$response"
             fi
           }
 
