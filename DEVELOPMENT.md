@@ -11,9 +11,10 @@ MAAP package-build path.
 | `esa_biomass_gamma0_staged` | `dps/staged/esa-biomass-gamma0-staged.cwl` | `ghcr.io/maap-project/esa-biomass-gamma0-staged` |
 | `esa_biomass_gamma0_fetch` | `dps/fetch/esa-biomass-gamma0-fetch.cwl` | `ghcr.io/maap-project/esa-biomass-gamma0-fetch` |
 
-The staged CWL accepts four `File` inputs and disables network access. The
-fetch CWL accepts only `item_id` and enables network access. Both return an
-`output` `Directory`.
+Both CWLs permit network access: staged requires it for MAAP `File` staging,
+and fetch requires it for source materialization. The staged workflow accepts
+only local paths and retrieves no credentials; fetch accepts only `item_id`.
+Both return an `output` `Directory`.
 
 ## Release deployment
 

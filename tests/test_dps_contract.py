@@ -20,8 +20,27 @@ STAGED_INPUTS = {
 }
 FETCH_INPUTS = {"item_id": "string"}
 CONTRACTS = {
-    "staged": ("esa_biomass_gamma0_staged", STAGED_INPUTS, False, 8),
-    "fetch": ("esa_biomass_gamma0_fetch", FETCH_INPUTS, True, 16),
+    "staged": (
+        "esa_biomass_gamma0_staged",
+        STAGED_INPUTS,
+        True,
+        {"ramMin": 16, "coresMin": 8, "outdirMax": 20},
+    ),
+    "fetch": (
+        "esa_biomass_gamma0_fetch",
+        FETCH_INPUTS,
+        True,
+        {"ramMin": 16, "coresMin": 4, "outdirMax": 20},
+    ),
+}
+PUBLIC_INPUT_LABELS = {
+    "staged": {
+        "source_item": "Source STAC Item",
+        "beta0_tiff": "Beta0 TIFF",
+        "radiometry_lut": "Radiometry LUT",
+        "annotation_xml": "Annotation XML",
+    },
+    "fetch": {"item_id": "Source STAC Item ID"},
 }
 
 
@@ -46,30 +65,35 @@ def _input_types(inputs: dict[str, object]) -> dict[str, object]:
 
 def test_cwl_exposes_only_the_inputs_for_its_execution_mode() -> None:
     """Each repository-owned CWL declares one mode-specific public interface."""
-    for mode, (algorithm_name, mode_inputs, _, ram_min) in CONTRACTS.items():
+    for mode, (algorithm_name, mode_inputs, _, resources) in CONTRACTS.items():
         cwl = _load_yaml(ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl")
         workflow, tool = cwl["$graph"]
+        workflow_inputs = _input_mapping(workflow["inputs"])
+        tool_inputs = _input_mapping(tool["inputs"])
 
         assert workflow["id"] == algorithm_name
+        assert workflow.get("label")
+        assert workflow.get("doc")
         assert cwl["s:softwareVersion"] == PACKAGE_VERSION
         assert cwl["s:version"] == PACKAGE_VERSION
         assert cwl["s:codeRepository"] == (
             "https://github.com/MAAP-Project/esa-biomass-gamma0"
         )
-        assert tool["requirements"]["ResourceRequirement"]["ramMin"] == ram_min
+        assert tool["requirements"]["ResourceRequirement"] == resources
         assert tool["requirements"]["DockerRequirement"]["dockerPull"] == (
             f"ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v{PACKAGE_VERSION}"
         )
-        for declarations in (workflow["inputs"], tool["inputs"]):
-            inputs = _input_mapping(declarations)
-            assert _input_types(inputs) == mode_inputs
-            for name, expected_type in mode_inputs.items():
-                assert inputs[name]["type"] == expected_type
-                assert inputs[name].get("label") or declarations is tool["inputs"]
+        assert _input_types(workflow_inputs) == mode_inputs
+        assert _input_types(tool_inputs) == mode_inputs
+        for name, expected_type in mode_inputs.items():
+            assert workflow_inputs[name]["type"] == expected_type
+            assert workflow_inputs[name]["label"] == PUBLIC_INPUT_LABELS[mode][name]
+            assert workflow_inputs[name].get("doc")
+            assert tool_inputs[name]["type"] == expected_type
 
 
-def test_cwl_returns_only_local_output_with_mode_specific_network_access() -> None:
-    """Both tools return ``output`` while only fetch permits networking."""
+def test_cwl_returns_only_local_output_with_declared_network_access() -> None:
+    """Both tools return ``output`` with their required MAAP network policy."""
     for mode, (_, _, network_access, _) in CONTRACTS.items():
         cwl_path = ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl"
         workflow, tool = _load_yaml(cwl_path)["$graph"]

@@ -24,13 +24,14 @@ Two registered MAAP algorithms expose the same scientific product:
 
 | Algorithm | Use it when | Inputs | Network access |
 | --- | --- | --- | --- |
-| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values | Disabled |
-| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string | Enabled only to materialize the source |
+| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values | Enabled for MAAP File staging |
+| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string | Enabled for source materialization |
 
-Choose **staged** when another workflow has prepared the four files, or when the
-job must remain network-free. Choose **fetch** when submitting an Item ID is
-more convenient. Fetch retrieves MAAP-managed secrets inside the job, creates
-temporary local files, and runs the same staged processing workflow.
+Choose **staged** when another workflow has prepared the four files. Its CWL
+permits MAAP File staging over the network, but the staged workflow accepts only
+local paths and retrieves no credentials. Choose **fetch** when submitting an
+Item ID is more convenient. Fetch retrieves MAAP-managed secrets inside the job,
+creates temporary local files, and runs the same staged processing workflow.
 
 ## Submit a MAAP job
 
@@ -85,8 +86,8 @@ access only for materialization, and removes temporary source files on exit.
 Both algorithms return the same `./output` Directory.
 
 Use a queue available to your MAAP organization that meets the algorithm's
-resource request: staged requires 8 GB and four cores; fetch requires 16 GB and
-four cores. The job runs asynchronously; use the MAAP Jobs UI or
+resource request: staged requires 16 GB and eight cores; fetch requires 16 GB
+and four cores. The job runs asynchronously; use the MAAP Jobs UI or
 `job.retrieve_attributes()` to monitor it.
 
 ### Local CLI

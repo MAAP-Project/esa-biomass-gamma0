@@ -13,7 +13,7 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 - Use the tile's UTM CRS and a deterministic `4000 × 4000` grid at 25 m.
 - Create one STAC Item per `(source granule, MGRS tile)` pair and a local Catalog with direct Item links.
 - Retain acquisition time, projection details, nodata semantics, processing metadata, and sanitized source provenance.
-- Process a source STAC Item JSON, Beta0 TIFF, radiometry NetCDF, and annotation XML as staged local inputs. The staged algorithm makes no network requests; a separate authenticated fetch algorithm materializes those same local inputs from a source Item ID.
+- Process a source STAC Item JSON, Beta0 TIFF, radiometry NetCDF, and annotation XML as staged local inputs. The staged workflow makes no network requests or credential lookups; its CWL permits network access only for MAAP `File` staging. A separate authenticated fetch algorithm materializes those same local inputs from a source Item ID.
 
 ## Non-goals
 
@@ -60,7 +60,7 @@ The package must not build a virtual stack from radar-geometry data. Consumers m
 
 ### 1. Materialize one source granule
 
-1. `esa_biomass_gamma0_staged` accepts the source Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), and `enclosure_annot_xml` (annotation) as OGC `File` inputs. It has no network access and does not retrieve credentials.
+1. `esa_biomass_gamma0_staged` accepts the source Item JSON, `enclosure_tiff` (Beta0), `enclosure_nc` (radiometry LUT), and `enclosure_annot_xml` (annotation) as OGC `File` inputs. Its CWL permits network access for MAAP `File` staging, while the staged workflow itself retrieves no credentials and makes no network requests.
 2. `esa_biomass_gamma0_fetch` accepts one `BiomassLevel1b` Item ID. It retrieves `ESA_MAAP_CLIENT_SECRET` and `ESA_OFFLINE_TOKEN` through `MAAP().secrets.get_secret`, exchanges them for an access token, finds the Item, and downloads those four local inputs into job-local temporary storage. It must never log, serialize, tag, or persist secrets, tokens, or signed URLs.
 3. Both forms pass the same four local paths to the staged-source workflow. That workflow validates the source ID, acquisition datetime, horizontal bbox, required Item asset entries, and readable regular staged files. It rejects antimeridian and polar bboxes for this UTM-only release.
 4. The workflow retains source ID, collection, time, Item self link, and required asset URLs as provenance after removing URL user info, query parameters, and fragments.
@@ -254,8 +254,9 @@ Two direct OGC Application Packages expose the modes:
 `dps/fetch/esa-biomass-gamma0-fetch.cwl` registers
 `esa_biomass_gamma0_fetch` for its `item_id` input. Both always produce 25 m
 products, expose no resolution or overwrite control, return `./output` as a
-`Directory`, and call the same local-file workflow. The staged CWL disables
-network access; the fetch CWL enables it.
+`Directory`, and call the same local-file workflow. Both CWLs permit network
+access: staged for MAAP `File` staging and fetch for authenticated source
+materialization. The staged workflow itself remains credential-free and local-path-only.
 
 CWL is the sole deployment contract. Release Please turns conventional commits
 on `main` into a reviewed release PR, updating the package version and annotated
@@ -312,7 +313,7 @@ extra to match the bundled PgSTAC image.
 - Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
 - Raster tests use real temporary files to validate direct warps, nine single-band COGs, the HH/HV/VV 2nd-to-98th-percentile RGB thumbnail, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
 - STAC tests validate Item geometry fallback, all ten assets, source links, time, projection/raster/SAR metadata, Catalog rebuild, empty results, replacement safety, and recovery after stale registration.
-- DPS contract tests validate each tracked CWL, shell wrapper, and public inputs; they assert that staged execution has no network or credential configuration, fetch execution permits network access, and both converge on the same local-file workflow. Release CI also validates OGC metadata, image-tag/version parity, and the deployment request path.
+- DPS contract tests validate each tracked CWL, shell wrapper, and public inputs; they assert the declared network and resource requirements, public labels and documentation, staged credential-free local-path processing, and convergence on the same local-file workflow. Release CI also validates OGC metadata, image-tag/version parity, and the deployment request path.
 
 ### Scientific validation gates
 
@@ -326,7 +327,7 @@ Inspect one swath-edge tile and one swath-interior tile against independent map 
 2. Establish `src/esa_biomass_gamma0/` with deterministic tests, then extract staged-input validation, grid/GCP, calibration, raster, STAC, and workflow helpers.
 3. Route `main.py` and the proof-of-concept notebook through shared physical-coordinate calibration helpers without changing their diagnostic responsibilities.
 4. Implement the sequential staged-source workflow, nine COG assets, thumbnail, atomic product promotion, and Catalog recovery.
-5. Add two thin uv-based MAAP application packages: a network-free staged-files adapter and an authenticated Item-ID fetch adapter that materializes job-local files before calling the staged workflow.
+5. Add two thin uv-based MAAP application packages: a staged-files adapter whose CWL permits MAAP File staging while its workflow remains credential-free and local-path-only, and an authenticated Item-ID fetch adapter that materializes job-local files before calling the staged workflow.
 6. Update README and operational documentation with both input modes, MAAP secret setup, output contract, empty-Catalog behavior, and scientific acceptance gate.
 
 Existing native GCP COGs remain diagnostics. They must not join the UTM tile collection or analysis-ready temporal stacks.
@@ -345,7 +346,7 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while GCP overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environments from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution across both MAAP packages. |
-| DPS input modes | Separate hand-maintained staged-files and Item-ID fetch CWLs | Distinct schemas and network policies keep the no-network scientific boundary explicit. |
+| DPS input modes | Separate hand-maintained staged-files and Item-ID fetch CWLs | Distinct schemas isolate fetch authentication; staged permits MAAP File staging while its scientific workflow remains credential-free and local-path-only. |
 | Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |
 | Empty source result | Valid empty Catalog | A source can have no GCP-overlapping candidates while the DPS output contract still requires root STAC files. |
 | OGC deployment | GitHub Release validates, builds, and updates the two hand-maintained CWLs | CWL stays reviewable in source control without a generator committing derived files. |
