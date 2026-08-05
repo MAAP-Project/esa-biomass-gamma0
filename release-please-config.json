@@ -17,6 +17,14 @@
         {
           "type": "generic",
           "path": "uv.lock"
+        },
+        {
+          "type": "generic",
+          "path": "examples/stac/collection.json"
+        },
+        {
+          "type": "generic",
+          "path": "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
         }
       ]
     }
