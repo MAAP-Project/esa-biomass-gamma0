@@ -131,6 +131,7 @@ def test_release_please_owns_versioned_release_files() -> None:
 
     assert manifest == {".": PACKAGE_VERSION}
     assert config["include-v-in-tag"] is True
+    assert config["always-update"] is True
     extra_files_by_path = {entry["path"]: entry for entry in extra_files}
     assert set(extra_files_by_path) == {
         "dps/staged/esa-biomass-gamma0-staged.cwl",
