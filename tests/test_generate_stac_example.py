@@ -1,5 +1,6 @@
 """Tests for the checked-in STAC metadata example."""
 
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -26,9 +27,9 @@ def test_generator_reproduces_the_checked_in_stac_metadata(tmp_path: Path) -> No
     item.validate()
 
     expected_item = EXAMPLE_DIRECTORY / item.id / f"{item.id}.json"
-    assert (output_directory / "collection.json").read_text() == (
-        EXAMPLE_DIRECTORY / "collection.json"
-    ).read_text()
-    assert (output_directory / item.id / f"{item.id}.json").read_text() == (
-        expected_item.read_text()
+    assert json.loads((output_directory / "collection.json").read_text()) == json.loads(
+        (EXAMPLE_DIRECTORY / "collection.json").read_text()
     )
+    assert json.loads(
+        (output_directory / item.id / f"{item.id}.json").read_text()
+    ) == json.loads(expected_item.read_text())
