@@ -20,8 +20,27 @@ STAGED_INPUTS = {
 }
 FETCH_INPUTS = {"item_id": "string"}
 CONTRACTS = {
-    "staged": ("esa_biomass_gamma0_staged", STAGED_INPUTS, False, 8),
-    "fetch": ("esa_biomass_gamma0_fetch", FETCH_INPUTS, True, 16),
+    "staged": (
+        "esa_biomass_gamma0_staged",
+        STAGED_INPUTS,
+        True,
+        {"ramMin": 16, "coresMin": 8, "outdirMax": 20},
+    ),
+    "fetch": (
+        "esa_biomass_gamma0_fetch",
+        FETCH_INPUTS,
+        True,
+        {"ramMin": 16, "coresMin": 4, "outdirMax": 20},
+    ),
+}
+PUBLIC_INPUT_LABELS = {
+    "staged": {
+        "source_item": "Source STAC Item",
+        "beta0_tiff": "Beta0 TIFF",
+        "radiometry_lut": "Radiometry LUT",
+        "annotation_xml": "Annotation XML",
+    },
+    "fetch": {"item_id": "Source STAC Item ID"},
 }
 
 
@@ -46,30 +65,35 @@ def _input_types(inputs: dict[str, object]) -> dict[str, object]:
 
 def test_cwl_exposes_only_the_inputs_for_its_execution_mode() -> None:
     """Each repository-owned CWL declares one mode-specific public interface."""
-    for mode, (algorithm_name, mode_inputs, _, ram_min) in CONTRACTS.items():
+    for mode, (algorithm_name, mode_inputs, _, resources) in CONTRACTS.items():
         cwl = _load_yaml(ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl")
         workflow, tool = cwl["$graph"]
+        workflow_inputs = _input_mapping(workflow["inputs"])
+        tool_inputs = _input_mapping(tool["inputs"])
 
         assert workflow["id"] == algorithm_name
+        assert workflow.get("label")
+        assert workflow.get("doc")
         assert cwl["s:softwareVersion"] == PACKAGE_VERSION
         assert cwl["s:version"] == PACKAGE_VERSION
         assert cwl["s:codeRepository"] == (
             "https://github.com/MAAP-Project/esa-biomass-gamma0"
         )
-        assert tool["requirements"]["ResourceRequirement"]["ramMin"] == ram_min
+        assert tool["requirements"]["ResourceRequirement"] == resources
         assert tool["requirements"]["DockerRequirement"]["dockerPull"] == (
             f"ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v{PACKAGE_VERSION}"
         )
-        for declarations in (workflow["inputs"], tool["inputs"]):
-            inputs = _input_mapping(declarations)
-            assert _input_types(inputs) == mode_inputs
-            for name, expected_type in mode_inputs.items():
-                assert inputs[name]["type"] == expected_type
-                assert inputs[name].get("label") or declarations is tool["inputs"]
+        assert _input_types(workflow_inputs) == mode_inputs
+        assert _input_types(tool_inputs) == mode_inputs
+        for name, expected_type in mode_inputs.items():
+            assert workflow_inputs[name]["type"] == expected_type
+            assert workflow_inputs[name]["label"] == PUBLIC_INPUT_LABELS[mode][name]
+            assert workflow_inputs[name].get("doc")
+            assert tool_inputs[name]["type"] == expected_type
 
 
-def test_cwl_returns_only_local_output_with_mode_specific_network_access() -> None:
-    """Both tools return ``output`` while only fetch permits networking."""
+def test_cwl_returns_only_local_output_with_declared_network_access() -> None:
+    """Both tools return ``output`` with their required MAAP network policy."""
     for mode, (_, _, network_access, _) in CONTRACTS.items():
         cwl_path = ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl"
         workflow, tool = _load_yaml(cwl_path)["$graph"]
@@ -144,13 +168,21 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert {
         path: entry["type"] for path, entry in extra_files_by_path.items()
     } == {
-        "dps/staged/esa-biomass-gamma0-staged.cwl": "generic",
-        "dps/fetch/esa-biomass-gamma0-fetch.cwl": "generic",
+        "dps/staged/esa-biomass-gamma0-staged.cwl": "yaml",
+        "dps/fetch/esa-biomass-gamma0-fetch.cwl": "yaml",
         "examples/stac/collection.json": "json",
         "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json": "json",
         "uv.lock": "generic",
     }
+    for mode in CONTRACTS:
+        cwl_path = f"dps/{mode}/esa-biomass-gamma0-{mode}.cwl"
+        assert [
+            entry["jsonpath"]
+            for entry in extra_files
+            if entry["path"] == cwl_path
+        ] == ["$['s:softwareVersion']", "$['s:version']"]
+
     assert extra_files_by_path["examples/stac/collection.json"]["jsonpath"] == (
         '$.providers[*]["processing:software"]["esa-biomass-gamma0"]'
     )
@@ -159,22 +191,32 @@ def test_release_please_owns_versioned_release_files() -> None:
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
     ]["jsonpath"] == '$.properties["processing:software"]["esa-biomass-gamma0"]'
     assert workflow[True]["push"] == {"branches": ["main"]}
-    release_step = workflow["jobs"]["release-please"]["steps"][0]
+    release_step, checkout_step, sync_step = workflow["jobs"]["release-please"]["steps"]
+    assert release_step["id"] == "release-please"
     assert release_step["uses"].startswith(
         "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7"
     )
     assert release_step["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
     assert "GITHUB_TOKEN" not in str(release_step)
+    assert checkout_step["if"] == (
+        "steps.release-please.outputs.prs_created == 'true'"
+    )
+    assert checkout_step["with"]["ref"] == (
+        "${{ fromJSON(steps.release-please.outputs.pr).headBranchName }}"
+    )
+    assert sync_step["if"] == checkout_step["if"]
+    assert "release-please-manifest.json" in sync_step["run"]
+    assert "git push origin HEAD:$branch" in sync_step["run"]
 
     lock = (ROOT / "uv.lock").read_text()
     assert f'version = "{PACKAGE_VERSION}" # x-release-please-version' in lock
 
     for mode in CONTRACTS:
         text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
-        assert text.count("x-release-please-version") == 3
+        assert "x-release-please-version" not in text
         assert (
             f"dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v"
-            f"{PACKAGE_VERSION} # x-release-please-version"
+            f"{PACKAGE_VERSION}"
         ) in text
 
 
@@ -223,6 +265,9 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     assert "esa-biomass-gamma0-fetch.cwl" in deploy_script
     assert "--request POST" in deploy_script
     assert "--request PUT" in deploy_script
+    assert "processPipelineLink.href" in deploy_script
+    assert "GITHUB_STEP_SUMMARY" in deploy_script
+    assert 'cat "$response"' not in deploy_script
     assert "latest" not in workflow["jobs"]["publish"]["steps"][-1]["with"]["tags"]
     assert "latest" not in deploy_script
     for job in workflow["jobs"].values():

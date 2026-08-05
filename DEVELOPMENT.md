@@ -11,9 +11,10 @@ MAAP package-build path.
 | `esa_biomass_gamma0_staged` | `dps/staged/esa-biomass-gamma0-staged.cwl` | `ghcr.io/maap-project/esa-biomass-gamma0-staged` |
 | `esa_biomass_gamma0_fetch` | `dps/fetch/esa-biomass-gamma0-fetch.cwl` | `ghcr.io/maap-project/esa-biomass-gamma0-fetch` |
 
-The staged CWL accepts four `File` inputs and disables network access. The
-fetch CWL accepts only `item_id` and enables network access. Both return an
-`output` `Directory`.
+Both CWLs permit network access: staged requires it for MAAP `File` staging,
+and fetch requires it for source materialization. The staged workflow accepts
+only local paths and retrieves no credentials; fetch accepts only `item_id`.
+Both return an `output` `Directory`.
 
 ## Release deployment
 
@@ -24,8 +25,9 @@ never reference `latest`.
 
 [Release Please](.github/workflows/release-please.yml) runs after conventional
 commits merge to `main`. It opens or updates a release PR with the package
-version, frozen `uv.lock` package entry, both annotated hand-maintained CWLs,
-and `CHANGELOG.md`. Review that PR like any other change. Merging it creates a `v<package-version>` GitHub
+version, frozen `uv.lock` package entry, clean CWL version metadata, and
+`CHANGELOG.md`, then synchronizes both CWL image tags from the release manifest
+on that PR. Review that PR like any other change. Merging it creates a `v<package-version>` GitHub
 Release, which triggers [the deployment workflow](.github/workflows/release.yml):
 
 1. it checks out the release tag and verifies the package/CWL/image-tag contract;
@@ -33,7 +35,10 @@ Release, which triggers [the deployment workflow](.github/workflows/release.yml)
 3. it publishes immutable staged and fetch `v<version>` images; and
 4. it registers each release-commit-pinned raw CWL URL at
    `https://api.maap-project.org/api/ogc/processes`, updating an existing process
-   when MAAP returns HTTP 409.
+   when MAAP returns HTTP 409; and
+5. when MAAP accepts an asynchronous deployment (HTTP 202), it polls the
+   deployment job until it succeeds, fails, or times out. A release cannot pass
+   while either MAAP deployment remains incomplete.
 
 Set `RELEASE_PLEASE_TOKEN` as a fine-grained repository token with Contents and
 Pull requests read/write access. It lets Release Please create the GitHub Release

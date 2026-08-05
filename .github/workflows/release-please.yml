@@ -13,6 +13,47 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release-please
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - uses: actions/checkout@v6
+        if: steps.release-please.outputs.prs_created == 'true'
+        with:
+          ref: ${{ fromJSON(steps.release-please.outputs.pr).headBranchName }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - name: Sync CWL Docker tags
+        if: steps.release-please.outputs.prs_created == 'true'
+        env:
+          RELEASE_PR: ${{ steps.release-please.outputs.pr }}
+        run: |
+          set -euo pipefail
+          branch="$(jq --exit-status --raw-output '.headBranchName' <<< "$RELEASE_PR")"
+          version="$(jq --exit-status --raw-output '.["."]' .release-please-manifest.json)"
+
+          python - "$version" <<'PY'
+          from pathlib import Path
+          import sys
+
+          version = sys.argv[1]
+          for mode in ("staged", "fetch"):
+              path = Path(f"dps/{mode}/esa-biomass-gamma0-{mode}.cwl")
+              prefix = (
+                  "        dockerPull: ghcr.io/maap-project/"
+                  f"esa-biomass-gamma0-{mode}:v"
+              )
+              lines = path.read_text(encoding="utf-8").splitlines()
+              matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+              if len(matches) != 1:
+                  raise SystemExit(f"expected one Docker image tag in {path}, found {len(matches)}")
+              lines[matches[0]] = f"{prefix}{version}"
+              path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add dps
+          git diff --cached --quiet || git commit -m "chore: sync CWL image tags"
+          git push origin HEAD:$branch

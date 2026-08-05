@@ -8,12 +8,24 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {
-          "type": "generic",
-          "path": "dps/staged/esa-biomass-gamma0-staged.cwl"
+          "type": "yaml",
+          "path": "dps/staged/esa-biomass-gamma0-staged.cwl",
+          "jsonpath": "$['s:softwareVersion']"
         },
         {
-          "type": "generic",
-          "path": "dps/fetch/esa-biomass-gamma0-fetch.cwl"
+          "type": "yaml",
+          "path": "dps/staged/esa-biomass-gamma0-staged.cwl",
+          "jsonpath": "$['s:version']"
+        },
+        {
+          "type": "yaml",
+          "path": "dps/fetch/esa-biomass-gamma0-fetch.cwl",
+          "jsonpath": "$['s:softwareVersion']"
+        },
+        {
+          "type": "yaml",
+          "path": "dps/fetch/esa-biomass-gamma0-fetch.cwl",
+          "jsonpath": "$['s:version']"
         },
         {
           "type": "generic",
