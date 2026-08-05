@@ -1,0 +1,196 @@
+{
+  "type": "Collection",
+  "id": "biomass-gamma0-mgrs-25m",
+  "stac_version": "1.1.0",
+  "description": "Fixed-grid 25 m ESA BIOMASS Beta0 and linear Gamma0 MGRS products.",
+  "links": [
+    {
+      "rel": "root",
+      "href": "./collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "processing-software",
+      "href": "https://github.com/MAAP-Project/esa-biomass-gamma0",
+      "type": "text/html",
+      "title": "ESA BIOMASS Gamma0 source repository"
+    },
+    {
+      "rel": "item",
+      "href": "./gamma0-BIOMASS_EXAMPLE_001-32TPR/gamma0-BIOMASS_EXAMPLE_001-32TPR.json",
+      "type": "application/geo+json"
+    }
+  ],
+  "stac_extensions": [
+    "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/render/v2.0.0/schema.json"
+  ],
+  "item_assets": {
+    "beta0_hh": {
+      "title": "Beta0 HH amplitude",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_hv": {
+      "title": "Beta0 HV amplitude",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_vh": {
+      "title": "Beta0 VH amplitude",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_vv": {
+      "title": "Beta0 VV amplitude",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_hh": {
+      "title": "Linear Gamma0 HH intensity",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_hv": {
+      "title": "Linear Gamma0 HV intensity",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_vh": {
+      "title": "Linear Gamma0 VH intensity",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_vv": {
+      "title": "Linear Gamma0 VV intensity",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_lut": {
+      "title": "Bilinearly resampled Gamma0 multiplicative factor",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "roles": [
+        "data"
+      ]
+    },
+    "thumbnail": {
+      "title": "Gamma0 RGB thumbnail",
+      "type": "image/png",
+      "roles": [
+        "thumbnail",
+        "overview"
+      ]
+    }
+  },
+  "renders": {
+    "beta0-rgb": {
+      "assets": [
+        "beta0_hh",
+        "beta0_hv",
+        "beta0_vv"
+      ],
+      "title": "Beta0 HH/HV/VV RGB",
+      "rescale": [
+        [
+          0.1,
+          1.0
+        ],
+        [
+          0.025,
+          0.42
+        ],
+        [
+          0.12,
+          0.8
+        ]
+      ],
+      "nodata": -9999.0
+    },
+    "gamma0-rgb": {
+      "assets": [
+        "gamma0_hh",
+        "gamma0_hv",
+        "gamma0_vv"
+      ],
+      "title": "Linear Gamma0 HH/HV/VV RGB",
+      "rescale": [
+        [
+          0.005,
+          0.5
+        ],
+        [
+          0.0003,
+          0.09
+        ],
+        [
+          0.007,
+          0.3
+        ]
+      ],
+      "nodata": -9999.0
+    },
+    "gamma0-correction-factor": {
+      "assets": [
+        "gamma0_lut"
+      ],
+      "title": "Gamma0 correction factor",
+      "rescale": [
+        [
+          0,
+          1
+        ]
+      ],
+      "nodata": -9999.0,
+      "colormap_name": "thermal"
+    }
+  },
+  "extent": {
+    "spatial": {
+      "bbox": [
+        [
+          10.272032960310225,
+          45.125153847634174,
+          11.584065120385375,
+          46.046265455836014
+        ]
+      ]
+    },
+    "temporal": {
+      "interval": [
+        [
+          "2026-07-31T12:00:00Z",
+          "2026-07-31T12:00:00Z"
+        ]
+      ]
+    }
+  },
+  "license": "other",
+  "providers": [
+    {
+      "name": "MAAP Project",
+      "roles": [
+        "processor"
+      ],
+      "url": "https://github.com/MAAP-Project/esa-biomass-gamma0",
+      "processing:software": {
+        "esa-biomass-gamma0": "0.0.0"
+      }
+    }
+  ]
+}

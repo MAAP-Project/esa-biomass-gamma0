@@ -1,0 +1,89 @@
+services:
+  stac-browser:
+    build:
+      context: dockerfiles
+      dockerfile: Dockerfile.browser
+      args:
+        STAC_BROWSER_VERSION: ${STAC_BROWSER_VERSION:-v5.0.0-rc.1}
+    ports:
+      - "${MY_DOCKER_IP:-127.0.0.1}:8085:8080"
+    depends_on:
+      - stac-fastapi
+      - titiler-pgstac
+
+  stac-fastapi:
+    image: ghcr.io/stac-utils/stac-fastapi-pgstac:6.3.1
+    ports:
+      - "${MY_DOCKER_IP:-127.0.0.1}:8081:8081"
+    environment:
+      PGUSER: username
+      PGPASSWORD: password
+      PGDATABASE: postgis
+      PGHOST: database
+      PGPORT: 5432
+      DB_MIN_CONN_SIZE: 1
+      DB_MAX_CONN_SIZE: 1
+    depends_on:
+      database:
+        condition: service_healthy
+    command: uvicorn stac_fastapi.pgstac.app:app --host 0.0.0.0 --port 8081
+
+  titiler-pgstac:
+    image: ghcr.io/stac-utils/titiler-pgstac:3.0.0
+    ports:
+      - "${MY_DOCKER_IP:-127.0.0.1}:8082:8082"
+    environment:
+      PGUSER: username
+      PGPASSWORD: password
+      PGDATABASE: postgis
+      PGHOST: database
+      PGPORT: 5432
+      DB_MIN_CONN_SIZE: 1
+      DB_MAX_CONN_SIZE: 10
+      CPL_TMPDIR: /tmp
+      GDAL_CACHEMAX: 75%
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      TITILER_PGSTAC_API_ENABLE_EXTERNAL_DATASET_ENDPOINTS: "TRUE"
+    depends_on:
+      database:
+        condition: service_healthy
+    command: uvicorn titiler.pgstac.main:app --host 0.0.0.0 --port 8082
+    volumes:
+      - "${GAMMA0_OUTPUT_ROOT:-./output}:/data/gamma0:ro"
+
+  tipg:
+    image: ghcr.io/developmentseed/tipg:1.4.0
+    ports:
+      - "${MY_DOCKER_IP:-127.0.0.1}:8083:8083"
+    environment:
+      DATABASE_URL: postgresql://username:password@database:5432/postgis
+      TIPG_DB_SCHEMAS: '["pgstac"]'
+      TIPG_DB_TABLES: '["pgstac.items"]'
+    depends_on:
+      database:
+        condition: service_healthy
+    command: uvicorn tipg.main:app --host 0.0.0.0 --port 8083
+
+  database:
+    image: ghcr.io/stac-utils/pgstac:v0.9.11
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgis
+      PGUSER: username
+      PGPASSWORD: password
+      PGDATABASE: postgis
+    ports:
+      - "${MY_DOCKER_IP:-127.0.0.1}:5439:5432"
+    command: postgres -N 500
+    volumes:
+      - ./.pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U username -d postgis"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+networks:
+  default:
+    name: biomass-gamma0-eoapi-network

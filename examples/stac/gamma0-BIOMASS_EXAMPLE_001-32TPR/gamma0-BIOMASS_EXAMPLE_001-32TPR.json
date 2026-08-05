@@ -1,0 +1,406 @@
+{
+  "type": "Feature",
+  "stac_version": "1.1.0",
+  "stac_extensions": [
+    "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+    "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/mgrs/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/sar/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/raster/v1.1.0/schema.json"
+  ],
+  "id": "gamma0-BIOMASS_EXAMPLE_001-32TPR",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          10.272032960310225,
+          45.14639287617173
+        ],
+        [
+          11.543123489782946,
+          45.125153847634174
+        ],
+        [
+          11.584065120385375,
+          46.024353395822914
+        ],
+        [
+          10.292532035827136,
+          46.046265455836014
+        ],
+        [
+          10.272032960310225,
+          45.14639287617173
+        ]
+      ]
+    ]
+  },
+  "bbox": [
+    10.272032960310225,
+    45.125153847634174,
+    11.584065120385375,
+    46.046265455836014
+  ],
+  "properties": {
+    "platform": "BIOMASS",
+    "instruments": [
+      "P-SAR"
+    ],
+    "processing:software": {
+      "esa-biomass-gamma0": "0.0.0"
+    },
+    "maap:partial_coverage": true,
+    "proj:code": "EPSG:32632",
+    "proj:shape": [
+      4000,
+      4000
+    ],
+    "proj:transform": [
+      25.0,
+      0.0,
+      600000.0,
+      0.0,
+      -25.0,
+      5100000.0
+    ],
+    "mgrs:latitude_band": "T",
+    "mgrs:grid_square": "PR",
+    "mgrs:utm_zone": 32,
+    "sar:instrument_mode": "P-SAR",
+    "sar:frequency_band": "P",
+    "sar:polarizations": [
+      "HH",
+      "HV",
+      "VH",
+      "VV"
+    ],
+    "sar:product_type": "Gamma0",
+    "datetime": "2026-07-31T12:00:00Z"
+  },
+  "links": [
+    {
+      "rel": "processing-software",
+      "href": "https://github.com/MAAP-Project/esa-biomass-gamma0",
+      "type": "text/html",
+      "title": "ESA BIOMASS Gamma0 source repository"
+    },
+    {
+      "rel": "derived_from",
+      "href": "https://example.test/items/BIOMASS_EXAMPLE_001.json",
+      "type": "application/json",
+      "title": "BIOMASS_EXAMPLE_001"
+    },
+    {
+      "rel": "via",
+      "href": "https://example.test/assets/beta0.tif"
+    },
+    {
+      "rel": "via",
+      "href": "https://example.test/assets/gamma-nought.nc"
+    },
+    {
+      "rel": "root",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "collection",
+      "href": "../collection.json",
+      "type": "application/json"
+    },
+    {
+      "rel": "parent",
+      "href": "../collection.json",
+      "type": "application/json"
+    }
+  ],
+  "assets": {
+    "beta0_hh": {
+      "href": "beta0_hh.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Beta0 HH amplitude",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "HH"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_hv": {
+      "href": "beta0_hv.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Beta0 HV amplitude",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "HV"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_vh": {
+      "href": "beta0_vh.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Beta0 VH amplitude",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "VH"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "beta0_vv": {
+      "href": "beta0_vv.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Beta0 VV amplitude",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "VV"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_hh": {
+      "href": "gamma0_hh.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Linear Gamma0 HH intensity",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "HH"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_hv": {
+      "href": "gamma0_hv.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Linear Gamma0 HV intensity",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "HV"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_vh": {
+      "href": "gamma0_vh.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Linear Gamma0 VH intensity",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "VH"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_vv": {
+      "href": "gamma0_vv.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Linear Gamma0 VV intensity",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "sar:polarizations": [
+        "VV"
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "gamma0_lut": {
+      "href": "gamma0_lut.tif",
+      "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+      "title": "Bilinearly resampled Gamma0 multiplicative factor",
+      "proj:code": "EPSG:32632",
+      "proj:shape": [
+        4000,
+        4000
+      ],
+      "proj:transform": [
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
+      ],
+      "raster:bands": [
+        {
+          "nodata": -9999.0,
+          "data_type": "float32",
+          "unit": "1"
+        }
+      ],
+      "roles": [
+        "data"
+      ]
+    },
+    "thumbnail": {
+      "href": "thumbnail.png",
+      "type": "image/png",
+      "title": "Gamma0 RGB thumbnail",
+      "roles": [
+        "thumbnail",
+        "overview"
+      ]
+    }
+  },
+  "collection": "biomass-gamma0-mgrs-25m"
+}
