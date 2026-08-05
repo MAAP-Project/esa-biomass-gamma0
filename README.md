@@ -1,5 +1,7 @@
 # ESA BIOMASS Gamma0 MGRS DPS
 
+![Mosaic of Gamma0 corrected Biomass granules](./mosaic.png)
+
 Create fixed-grid 25 m MGRS Beta0 and linear Gamma0 products from an ESA
 BIOMASS Level-1B granule, using staged files or a MAAP Item-ID fetch job.
 
@@ -125,7 +127,7 @@ logger = logging.getLogger("esa-biomass-gamma0")
 
 search = Client.open("https://catalog.maap.eo.esa.int/catalogue/").search(
     collections=["BiomassLevel1b"],
-    bbox=[25, 62, 26, 63],
+    bbox=[102, 60, 112, 63],
     max_items=10,
     sortby="-datetime",
 )
