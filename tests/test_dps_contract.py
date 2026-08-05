@@ -131,7 +131,8 @@ def test_release_please_owns_versioned_release_files() -> None:
 
     assert manifest == {".": PACKAGE_VERSION}
     assert config["include-v-in-tag"] is True
-    assert {entry["path"] for entry in extra_files} == {
+    extra_files_by_path = {entry["path"]: entry for entry in extra_files}
+    assert set(extra_files_by_path) == {
         "dps/staged/esa-biomass-gamma0-staged.cwl",
         "dps/fetch/esa-biomass-gamma0-fetch.cwl",
         "examples/stac/collection.json",
@@ -139,7 +140,23 @@ def test_release_please_owns_versioned_release_files() -> None:
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json",
         "uv.lock",
     }
-    assert {entry["type"] for entry in extra_files} == {"generic"}
+    assert {
+        path: entry["type"] for path, entry in extra_files_by_path.items()
+    } == {
+        "dps/staged/esa-biomass-gamma0-staged.cwl": "generic",
+        "dps/fetch/esa-biomass-gamma0-fetch.cwl": "generic",
+        "examples/stac/collection.json": "json",
+        "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
+        "gamma0-BIOMASS_EXAMPLE_001-32TPR.json": "json",
+        "uv.lock": "generic",
+    }
+    assert extra_files_by_path["examples/stac/collection.json"]["jsonpath"] == (
+        '$.providers[*]["processing:software"]["esa-biomass-gamma0"]'
+    )
+    assert extra_files_by_path[
+        "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
+        "gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
+    ]["jsonpath"] == '$.properties["processing:software"]["esa-biomass-gamma0"]'
     assert workflow[True]["push"] == {"branches": ["main"]}
     release_step = workflow["jobs"]["release-please"]["steps"][0]
     assert release_step["uses"].startswith(
