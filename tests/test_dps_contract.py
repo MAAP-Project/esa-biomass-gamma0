@@ -123,7 +123,7 @@ def test_direct_ogc_deployment_uses_only_tracked_cwl_contracts() -> None:
 
 
 def test_release_please_owns_versioned_release_files() -> None:
-    """Release Please updates the package and annotated CWL versions together."""
+    """Release Please updates package, CWL, and STAC example versions together."""
     config = json.loads((ROOT / "release-please-config.json").read_text())
     manifest = json.loads((ROOT / ".release-please-manifest.json").read_text())
     workflow = _load_yaml(ROOT / ".github" / "workflows" / "release-please.yml")
@@ -134,6 +134,9 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert {entry["path"] for entry in extra_files} == {
         "dps/staged/esa-biomass-gamma0-staged.cwl",
         "dps/fetch/esa-biomass-gamma0-fetch.cwl",
+        "examples/stac/collection.json",
+        "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
+        "gamma0-BIOMASS_EXAMPLE_001-32TPR.json",
         "uv.lock",
     }
     assert {entry["type"] for entry in extra_files} == {"generic"}
