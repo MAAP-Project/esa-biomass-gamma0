@@ -1,18 +1,20 @@
 cwlVersion: v1.2
-
 $namespaces:
   s: https://schema.org/
 $schemas:
-  - https://raw.githubusercontent.com/schemaorg/schemaorg/refs/heads/main/data/releases/9.0/schemaorg-current-http.rdf
-
+  - >-
+    https://raw.githubusercontent.com/schemaorg/schemaorg/refs/heads/main/data/releases/9.0/schemaorg-current-http.rdf
 s:author:
   - class: s:Organization
     s:name: MAAP Project
 s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
-s:softwareVersion: 0.1.0
-s:version: 0.1.0
-s:keywords: [ESA, BIOMASS, Gamma0, MGRS]
-
+s:softwareVersion: 0.1.1
+s:version: 0.1.1
+s:keywords:
+  - ESA
+  - BIOMASS
+  - Gamma0
+  - MGRS
 $graph:
   - class: Workflow
     id: esa_biomass_gamma0_staged
@@ -47,13 +49,13 @@ $graph:
           beta0_tiff: beta0_tiff
           radiometry_lut: radiometry_lut
           annotation_xml: annotation_xml
-        out: [output]
-
+        out:
+          - output
   - class: CommandLineTool
     id: main
     requirements:
       DockerRequirement:
-        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.0
+        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.1
       NetworkAccess:
         networkAccess: true
       ResourceRequirement:
@@ -61,28 +63,29 @@ $graph:
         coresMin: 8
         outdirMax: 20
     baseCommand: /app/esa-biomass-gamma0/dps/staged/run.sh
-    successCodes: [0]
+    successCodes:
+      - 0
     inputs:
       source_item:
         type: File
         inputBinding:
           position: 1
-          prefix: --source-item
+          prefix: '--source-item'
       beta0_tiff:
         type: File
         inputBinding:
           position: 2
-          prefix: --beta0-tiff
+          prefix: '--beta0-tiff'
       radiometry_lut:
         type: File
         inputBinding:
           position: 3
-          prefix: --radiometry-lut
+          prefix: '--radiometry-lut'
       annotation_xml:
         type: File
         inputBinding:
           position: 4
-          prefix: --annotation-xml
+          prefix: '--annotation-xml'
     outputs:
       output:
         type: Directory

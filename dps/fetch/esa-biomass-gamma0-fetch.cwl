@@ -1,18 +1,20 @@
 cwlVersion: v1.2
-
 $namespaces:
   s: https://schema.org/
 $schemas:
-  - https://raw.githubusercontent.com/schemaorg/schemaorg/refs/heads/main/data/releases/9.0/schemaorg-current-http.rdf
-
+  - >-
+    https://raw.githubusercontent.com/schemaorg/schemaorg/refs/heads/main/data/releases/9.0/schemaorg-current-http.rdf
 s:author:
   - class: s:Organization
     s:name: MAAP Project
 s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
-s:softwareVersion: 0.1.0
-s:version: 0.1.0
-s:keywords: [ESA, BIOMASS, Gamma0, MGRS]
-
+s:softwareVersion: 0.1.1
+s:version: 0.1.1
+s:keywords:
+  - ESA
+  - BIOMASS
+  - Gamma0
+  - MGRS
 $graph:
   - class: Workflow
     id: esa_biomass_gamma0_fetch
@@ -32,13 +34,13 @@ $graph:
         run: '#main'
         in:
           item_id: item_id
-        out: [output]
-
+        out:
+          - output
   - class: CommandLineTool
     id: main
     requirements:
       DockerRequirement:
-        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-fetch:v0.1.0
+        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-fetch:v0.1.1
       NetworkAccess:
         networkAccess: true
       ResourceRequirement:
@@ -46,7 +48,8 @@ $graph:
         coresMin: 4
         outdirMax: 20
     baseCommand: /app/esa-biomass-gamma0/dps/fetch/run.sh
-    successCodes: [0]
+    successCodes:
+      - 0
     inputs:
       item_id:
         type: string
