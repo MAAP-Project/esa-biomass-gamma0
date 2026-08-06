@@ -22,10 +22,10 @@ tile, it:
 
 Two registered MAAP algorithms expose the same scientific product:
 
-| Algorithm | Use it when | Inputs | Network access |
-| --- | --- | --- | --- |
-| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values | Enabled for MAAP File staging |
-| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string | Enabled for source materialization |
+| Algorithm | Use it when | Inputs |
+| --- | --- | --- |
+| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values |
+| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string |
 
 Choose **staged** when another workflow has prepared the four files. Its CWL
 permits MAAP File staging over the network, but the staged workflow accepts only
