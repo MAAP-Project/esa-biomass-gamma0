@@ -128,66 +128,79 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           }
 
-          wait_for_deployment() {
-            local workflow="$1"
-            local response="$2"
-            local headers="$3"
+          monitor_deployments() {
+            local workflow
+            local response
+            local headers
             local deployment_url
             local deployment_status
-            local status_response="$responses/$(basename "$workflow").deployment-status.json"
+            local status_response
             local deadline=$((SECONDS + 1800))
+            local -a pending_workflows=("$@")
+            local -a next_pending_workflows
+            declare -A deployment_urls
 
-            deployment_url="$(jq --raw-output '
-              (
-                .links[]?
-                | select(.rel == "monitor" and .type == "application/json")
-                | .href
-              ) //
-              .deploymentJobLink.href //
-              .additionalProperties.deploymentJobLink.href //
-              empty
-            ' "$response")"
-            if [ -z "$deployment_url" ]; then
-              deployment_url="$(awk 'BEGIN { IGNORECASE = 1 } /^location:/ { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit }' "$headers")"
-            fi
-            if [ -z "$deployment_url" ]; then
-              echo "MAAP returned HTTP 202 for $workflow without a deployment-status URL" >&2
-              return 1
-            fi
-            case "$deployment_url" in
-              http://*|https://*) ;;
-              /*) deployment_url="https://api.maap-project.org$deployment_url" ;;
-              *) deployment_url="$MAAP_OGC_DEPLOYMENT_JOBS_URL/$deployment_url" ;;
-            esac
-
-            while :; do
-              curl --fail-with-body --silent --show-error --output "$status_response" \
-                --header "proxy-ticket: $MAAP_TOKEN" \
-                "$deployment_url"
-              deployment_status="$(jq --raw-output '
-                .status // .state // .deploymentStatus // .additionalProperties.status // empty
-              ' "$status_response" | tr '[:upper:]' '[:lower:]')"
-
-              case "$deployment_status" in
-                success|successful|succeeded|complete|completed|deployed)
-                  printf 'MAAP deployment for %s succeeded: %s\n' "$workflow" "$deployment_status"
-                  printf -- '- Deployment status: %s\n' "$deployment_status" >> "$GITHUB_STEP_SUMMARY"
-                  return 0
-                  ;;
-                failed|failure|error|dismissed|cancelled|canceled)
-                  echo "MAAP deployment failed for $workflow: $deployment_status" >&2
-                  return 1
-                  ;;
-                *)
-                  if [ "$SECONDS" -ge "$deadline" ]; then
-                    echo "MAAP deployment timed out for $workflow; last status: ${deployment_status:-missing}" >&2
-                    return 1
-                  fi
-                  printf 'MAAP deployment for %s is %s; polling again in 10 seconds\n' \
-                    "$workflow" "${deployment_status:-unknown}"
-                  sleep 10
-                  ;;
+            for workflow in "${pending_workflows[@]}"; do
+              response="$responses/$(basename "$workflow").json"
+              headers="$responses/$(basename "$workflow").headers"
+              deployment_url="$(jq --raw-output '
+                (
+                  .links[]?
+                  | select(.rel == "monitor" and .type == "application/json")
+                  | .href
+                ) //
+                .deploymentJobLink.href //
+                .additionalProperties.deploymentJobLink.href //
+                empty
+              ' "$response")"
+              if [ -z "$deployment_url" ]; then
+                deployment_url="$(awk 'BEGIN { IGNORECASE = 1 } /^location:/ { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit }' "$headers")"
+              fi
+              if [ -z "$deployment_url" ]; then
+                echo "MAAP returned HTTP 202 for $workflow without a deployment-status URL" >&2
+                return 1
+              fi
+              case "$deployment_url" in
+                http://*|https://*) ;;
+                /*) deployment_url="https://api.maap-project.org$deployment_url" ;;
+                *) deployment_url="$MAAP_OGC_DEPLOYMENT_JOBS_URL/$deployment_url" ;;
               esac
+              deployment_urls["$workflow"]="$deployment_url"
+            done
+
+            while [ "${#pending_workflows[@]}" -gt 0 ]; do
+              next_pending_workflows=()
+              for workflow in "${pending_workflows[@]}"; do
+                status_response="$responses/$(basename "$workflow").deployment-status.json"
+                curl --fail-with-body --silent --show-error --output "$status_response" \
+                  --header "proxy-ticket: $MAAP_TOKEN" \
+                  "${deployment_urls[$workflow]}"
+                deployment_status="$(jq --raw-output '
+                  .status // .state // .deploymentStatus // .additionalProperties.status // empty
+                ' "$status_response" | tr '[:upper:]' '[:lower:]')"
+
+                case "$deployment_status" in
+                  success|successful|succeeded|complete|completed|deployed)
+                    printf 'MAAP deployment for %s succeeded: %s\n' "$workflow" "$deployment_status"
+                    printf -- '- Deployment status: %s\n' "$deployment_status" >> "$GITHUB_STEP_SUMMARY"
+                    ;;
+                  failed|failure|error|dismissed|cancelled|canceled)
+                    echo "MAAP deployment failed for $workflow: $deployment_status" >&2
+                    return 1
+                    ;;
+                  *)
+                    if [ "$SECONDS" -ge "$deadline" ]; then
+                      echo "MAAP deployment timed out for $workflow; last status: ${deployment_status:-missing}" >&2
+                      return 1
+                    fi
+                    printf 'MAAP deployment for %s is %s; polling again in 10 seconds\n' \
+                      "$workflow" "${deployment_status:-unknown}"
+                    next_pending_workflows+=("$workflow")
+                    ;;
+                esac
+              done
+              pending_workflows=("${next_pending_workflows[@]}")
+              [ "${#pending_workflows[@]}" -eq 0 ] || sleep 10
             done
           }
 
@@ -224,8 +237,10 @@ jobs:
               log_response "$workflow" "registered" "$status" "$response"
             fi
 
-            [ "$status" != "202" ] || wait_for_deployment "$workflow" "$response" "$headers"
+            [ "$status" != "202" ] || pending_workflows+=("$workflow")
           }
 
+          pending_workflows=()
           deploy dps/staged/esa-biomass-gamma0-staged.cwl
           deploy dps/fetch/esa-biomass-gamma0-fetch.cwl
+          [ "${#pending_workflows[@]}" -eq 0 ] || monitor_deployments "${pending_workflows[@]}"
