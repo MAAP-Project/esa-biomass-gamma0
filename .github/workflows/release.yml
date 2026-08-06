@@ -138,9 +138,13 @@ jobs:
             local deadline=$((SECONDS + 1800))
 
             deployment_url="$(jq --raw-output '
-              .processPipelineLink.href //
-              .additionalProperties.processPipelineLink.href //
+              (
+                .links[]?
+                | select(.rel == "monitor" and .type == "application/json")
+                | .href
+              ) //
               .deploymentJobLink.href //
+              .additionalProperties.deploymentJobLink.href //
               empty
             ' "$response")"
             if [ -z "$deployment_url" ]; then
