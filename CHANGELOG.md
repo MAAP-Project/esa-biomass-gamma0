@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.1...v0.1.2) (2026-08-06)
+
+
+### Bug Fixes
+
+* save catalog.json as self contained ([#10](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/10)) ([3078f67](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/3078f67479deab9a1523d7afa3c70a089aaa06eb))
+
 ## [0.1.1](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.0...v0.1.1) (2026-08-05)
 
 
