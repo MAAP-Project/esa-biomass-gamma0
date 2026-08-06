@@ -1,5 +1,6 @@
 """Tests for Gamma0 product STAC assembly and local catalog recovery."""
 
+import json
 from pathlib import Path
 
 from affine import Affine
@@ -192,7 +193,13 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
     (tmp_path / "collection.json").write_text("obsolete", encoding="utf-8")
 
     assert rebuild_catalog(tmp_path) == 2
-    catalog = Catalog.from_file(tmp_path / "catalog.json")
+    catalog_path = tmp_path / "catalog.json"
+    catalog = Catalog.from_file(catalog_path)
+    document = json.loads(catalog_path.read_text(encoding="utf-8"))
+    assert [link for link in document["links"] if link["rel"] == "self"] == []
+    assert next(link for link in document["links"] if link["rel"] == "root")[
+        "href"
+    ] == "./catalog.json"
     assert [product.id for product in catalog.get_items()] == [item.id, other_item.id]
     assert list(catalog.get_children()) == []
     assert not (tmp_path / "collection.json").exists()

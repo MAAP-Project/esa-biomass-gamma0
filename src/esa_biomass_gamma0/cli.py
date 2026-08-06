@@ -116,8 +116,12 @@ def fetch(
                 output_root=output_root,
                 window_padding_pixels=DEFAULT_WINDOW_PADDING_PIXELS,
             )
-    except Exception:
-        logger.error("Source fetch failed")
+    except Exception as error:
+        logger.error(
+            "Source fetch failed (%s)",
+            type(error).__name__,
+            exc_info=(type(error), None, error.__traceback__),
+        )
         raise typer.Exit(1) from None
     _exit_if_failed(status)
 

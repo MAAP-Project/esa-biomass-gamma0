@@ -11,6 +11,7 @@ import numpy as np
 from pyproj import Transformer
 from pystac import (
     Catalog,
+    CatalogType,
     Collection,
     Extent,
     Item,
@@ -317,6 +318,7 @@ def rebuild_catalog(output_root: Path) -> int:
 
     catalog_path = output_root / "catalog.json"
     catalog.set_self_href(str(catalog_path))
+    catalog.catalog_type = CatalogType.SELF_CONTAINED
 
     for path, item in products:
         item.set_self_href(str(path))
@@ -328,7 +330,7 @@ def rebuild_catalog(output_root: Path) -> int:
         item.validate()
 
     catalog.validate()
-    _write_json(catalog_path, catalog.to_dict())
+    _write_json(catalog_path, catalog.to_dict(include_self_link=False))
 
     (output_root / "collection.json").unlink(missing_ok=True)
 
