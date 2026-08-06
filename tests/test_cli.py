@@ -226,6 +226,8 @@ def test_fetch_command_hides_materialization_secrets(
     result = runner.invoke(cli.app, ["fetch", "source/item"])
 
     assert result.exit_code == 1
+    assert "Source fetch failed (ValueError)" in caplog.text
+    assert "Traceback (most recent call last)" in caplog.text
     assert secret not in result.output
     assert secret not in caplog.text
 

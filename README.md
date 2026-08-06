@@ -67,11 +67,13 @@ these secrets once through MAAP, never as fetch-job inputs or environment
 variables:
 
 ```python
+import os
+
 from maap.maap import MAAP
 
 maap = MAAP()
-maap.secrets.add_secret("ESA_MAAP_CLIENT_SECRET", "<ESA MAAP client secret>")
-maap.secrets.add_secret("ESA_OFFLINE_TOKEN", "<ESA offline token>")
+maap.secrets.add_secret("ESA_MAAP_CLIENT_SECRET", os.getenv("ESA_MAAP_CLIENT_SECRET"))
+maap.secrets.add_secret("ESA_OFFLINE_TOKEN", os.getenv("ESA_OFFLINE_TOKEN"))
 job = maap.submitJob(
     identifier="biomass-gamma0-fetch-example",
     algo_id="esa_biomass_gamma0_fetch",
