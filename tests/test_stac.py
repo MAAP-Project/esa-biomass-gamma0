@@ -16,7 +16,11 @@ from rasterio.crs import CRS
 
 from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
 from esa_biomass_gamma0.grids import TileGrid
-from esa_biomass_gamma0.raster import write_scientific_cogs, write_thumbnail
+from esa_biomass_gamma0.raster import (
+    product_asset_filename,
+    write_scientific_cogs,
+    write_thumbnail,
+)
 from esa_biomass_gamma0.source import validate_staged_source
 from esa_biomass_gamma0.stac import (
     COLLECTION_ID,
@@ -81,7 +85,10 @@ def _product(
         source_item_id=source.item_id,
         processing_version=PACKAGE_VERSION,
     )
-    write_thumbnail(directory / "thumbnail.png", gamma0)
+    write_thumbnail(
+        directory / product_asset_filename("thumbnail", source.item_id, grid.tile_id),
+        gamma0,
+    )
     return directory, source, grid
 
 
@@ -154,6 +161,9 @@ def test_builds_a_valid_item_for_complete_local_assets(
     assert "maap:partial_coverage" not in item.properties
     assert ProjectionExtension.ext(item).epsg == grid.epsg
     assert RasterExtension.ext(item.assets["gamma0_hh"]).bands[0].nodata == -9999.0
+    assert item.assets["beta0_hh"].href == product_asset_filename(
+        "beta0_hh", source.item_id, grid.tile_id
+    )
     assert item.assets["beta0_hh"].title == "Beta0 HH amplitude"
     assert item.assets["gamma0_hh"].title == "Linear Gamma0 HH intensity"
     assert item.assets["gamma0_hh"].roles == ["data"]
@@ -190,6 +200,9 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
         source, other_grid, other_directory, processing_version=PACKAGE_VERSION
     )
     write_item(other_item, other_directory / "item.json")
+    assert set(item.assets[key].href for key in item.assets).isdisjoint(
+        other_item.assets[key].href for key in other_item.assets
+    )
     (tmp_path / "collection.json").write_text("obsolete", encoding="utf-8")
 
     assert rebuild_catalog(tmp_path) == 2
@@ -197,9 +210,10 @@ def test_rebuild_catalog_links_products_directly_and_keeps_collection_optional(
     catalog = Catalog.from_file(catalog_path)
     document = json.loads(catalog_path.read_text(encoding="utf-8"))
     assert [link for link in document["links"] if link["rel"] == "self"] == []
-    assert next(link for link in document["links"] if link["rel"] == "root")[
-        "href"
-    ] == "./catalog.json"
+    assert (
+        next(link for link in document["links"] if link["rel"] == "root")["href"]
+        == "./catalog.json"
+    )
     assert [product.id for product in catalog.get_items()] == [item.id, other_item.id]
     assert list(catalog.get_children()) == []
     assert not (tmp_path / "collection.json").exists()

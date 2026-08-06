@@ -13,6 +13,7 @@ from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
 from esa_biomass_gamma0.grids import TileGrid
 from esa_biomass_gamma0.raster import (
     POLARIZATIONS,
+    product_asset_filename,
     THUMBNAIL_POLARIZATIONS,
     warp_scientific_arrays,
     write_scientific_cogs,
@@ -193,14 +194,23 @@ def test_writes_and_validates_nine_shared_grid_cogs_and_rgb_thumbnail(
     import rasterio
 
     with pytest.warns(rasterio.errors.NotGeoreferencedWarning):
-        thumbnail = write_thumbnail(directory / "thumbnail.png", gamma0)
+        thumbnail = write_thumbnail(
+            directory
+            / product_asset_filename("thumbnail", "BIOMASS_TEST_001", grid.tile_id),
+            gamma0,
+        )
 
     assert set(paths) == {
         *(f"beta0_{polarization.lower()}" for polarization in POLARIZATIONS),
         *(f"gamma0_{polarization.lower()}" for polarization in POLARIZATIONS),
         "gamma0_lut",
     }
-    assert thumbnail.exists()
+    assert {path.name for path in paths.values()} == {
+        product_asset_filename(key, "BIOMASS_TEST_001", grid.tile_id) for key in paths
+    }
+    assert thumbnail == directory / product_asset_filename(
+        "thumbnail", "BIOMASS_TEST_001", grid.tile_id
+    )
     assert THUMBNAIL_POLARIZATIONS == ("HH", "HV", "VV")
 
     datasets = [rasterio.open(path) for path in paths.values()]

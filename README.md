@@ -22,10 +22,10 @@ tile, it:
 
 Two registered MAAP algorithms expose the same scientific product:
 
-| Algorithm | Use it when | Inputs | Network access |
-| --- | --- | --- | --- |
-| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values | Enabled for MAAP File staging |
-| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string | Enabled for source materialization |
+| Algorithm | Use it when | Inputs |
+| --- | --- | --- |
+| `esa_biomass_gamma0_staged` | You already have the source Item JSON, Beta0 TIFF, radiometry LUT, and annotation XML as MAAP-accessible files. | Four `File` values |
+| `esa_biomass_gamma0_fetch` | You have a BIOMASS L1B STAC Item ID and want the job to retrieve its source files. | One `item_id` string |
 
 Choose **staged** when another workflow has prepared the four files. Its CWL
 permits MAAP File staging over the network, but the staged workflow accepts only
@@ -51,7 +51,7 @@ maap = MAAP()
 job = maap.submitJob(
     identifier="biomass-gamma0-staged-example",
     algo_id="esa_biomass_gamma0_staged",
-    version="v0.1.0",
+    version="v0.1.2",
     queue="maap-dps-worker-8gb",
     source_item="s3://<bucket>/source-item.json",
     beta0_tiff="s3://<bucket>/enclosure.tif",
@@ -226,21 +226,22 @@ Each accepted source granule and MGRS tile produces:
 
 ```text
 <tile>/<acquisition-date>/<source-item-id>/
-  beta0_hh.tif
-  beta0_hv.tif
-  beta0_vh.tif
-  beta0_vv.tif
-  gamma0_hh.tif
-  gamma0_hv.tif
-  gamma0_vh.tif
-  gamma0_vv.tif
-  gamma0_lut.tif
-  thumbnail.png
+  <source-item-id>-<tile>-beta0_hh.tif
+  <source-item-id>-<tile>-beta0_hv.tif
+  <source-item-id>-<tile>-beta0_vh.tif
+  <source-item-id>-<tile>-beta0_vv.tif
+  <source-item-id>-<tile>-gamma0_hh.tif
+  <source-item-id>-<tile>-gamma0_hv.tif
+  <source-item-id>-<tile>-gamma0_vh.tif
+  <source-item-id>-<tile>-gamma0_vv.tif
+  <source-item-id>-<tile>-gamma0_lut.tif
+  <source-item-id>-<tile>-thumbnail.png
   item.json
 ```
 
 The job also writes `catalog.json` at the output root, with direct links to each
-Item. Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
+Item. Asset filenames include their source Item ID and MGRS tile so they remain
+unique across the job output. Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
 Gamma0 is linear intensity, not dB. Every Item provides descriptive
 polarization-specific titles, media types, and roles for all ten assets.
 

@@ -30,6 +30,7 @@ from esa_biomass_gamma0.grids import (
     shifted_gcps,
 )
 from esa_biomass_gamma0.raster import (
+    product_asset_filename,
     warp_scientific_arrays,
     write_scientific_cogs,
     write_thumbnail,
@@ -185,7 +186,10 @@ def _write_product(
         source_item_id=source.item_id,
         processing_version=processing_version,
     )
-    write_thumbnail(temporary / "thumbnail.png", warped_gamma0)
+    write_thumbnail(
+        temporary / product_asset_filename("thumbnail", source.item_id, grid.tile_id),
+        warped_gamma0,
+    )
     item = build_item(
         source,
         grid,

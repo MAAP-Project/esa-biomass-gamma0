@@ -33,12 +33,12 @@ Release, which triggers [the deployment workflow](.github/workflows/release.yml)
 1. it checks out the release tag and verifies the package/CWL/image-tag contract;
 2. it validates both CWLs and runs the test suite;
 3. it publishes immutable staged and fetch `v<version>` images; and
-4. it registers each release-commit-pinned raw CWL URL at
+4. it registers both release-commit-pinned raw CWL URLs at
    `https://api.maap-project.org/api/ogc/processes`, updating an existing process
    when MAAP returns HTTP 409; and
-5. when MAAP accepts an asynchronous deployment (HTTP 202), it polls the
-   deployment job until it succeeds, fails, or times out. A release cannot pass
-   while either MAAP deployment remains incomplete.
+5. it then polls all asynchronous deployments (HTTP 202) until they succeed,
+   fail, or time out. A release cannot pass while either MAAP deployment remains
+   incomplete.
 
 Set `RELEASE_PLEASE_TOKEN` as a fine-grained repository token with Contents and
 Pull requests read/write access. It lets Release Please create the GitHub Release

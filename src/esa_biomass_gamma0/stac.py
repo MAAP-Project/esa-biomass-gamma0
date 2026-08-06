@@ -36,6 +36,7 @@ from esa_biomass_gamma0.grids import TileGrid
 from esa_biomass_gamma0.raster import (
     NODATA,
     POLARIZATIONS,
+    product_asset_filename,
     validate_scientific_cog,
     validate_thumbnail,
 )
@@ -180,7 +181,7 @@ def build_item(
     )
 
     for key, definition in ITEM_ASSETS.items():
-        filename = "thumbnail.png" if key == THUMBNAIL_KEY else f"{key}.tif"
+        filename = product_asset_filename(key, source.item_id, grid.tile_id)
         path = directory / filename
         if not path.is_file():
             raise ValueError(f"missing product asset: {path}")

@@ -10,10 +10,10 @@ from pystac import CatalogType
 
 from esa_biomass_gamma0 import __version__
 from esa_biomass_gamma0.grids import target_grid
+from esa_biomass_gamma0.raster import product_asset_filename
 from esa_biomass_gamma0.source import StagedSource
 from esa_biomass_gamma0.stac import (
     ITEM_ASSETS,
-    THUMBNAIL_KEY,
     build_item,
     create_collection,
 )
@@ -28,11 +28,14 @@ def generate(output_directory: Path) -> tuple[Path, Path]:
     grid = target_grid("32TPR")
     with TemporaryDirectory() as temporary_directory:
         assets_directory = Path(temporary_directory)
+        source = _source(assets_directory)
         for key in ITEM_ASSETS:
-            filename = "thumbnail.png" if key == THUMBNAIL_KEY else f"{key}.tif"
-            (assets_directory / filename).touch()
+            (
+                assets_directory
+                / product_asset_filename(key, source.item_id, grid.tile_id)
+            ).touch()
         item = build_item(
-            _source(assets_directory),
+            source,
             grid,
             assets_directory,
             processing_version=__version__,

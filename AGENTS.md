@@ -67,16 +67,16 @@ accepts an AOI or study-vector input.
 
 ```text
 <output-root>/<mgrs-tile>/<acquisition-date>/<source-item-id>/
-  beta0_hh.tif
-  beta0_hv.tif
-  beta0_vh.tif
-  beta0_vv.tif
-  gamma0_hh.tif
-  gamma0_hv.tif
-  gamma0_vh.tif
-  gamma0_vv.tif
-  gamma_nought.tif
-  thumbnail.png
+  <source-item-id>-<mgrs-tile>-beta0_hh.tif
+  <source-item-id>-<mgrs-tile>-beta0_hv.tif
+  <source-item-id>-<mgrs-tile>-beta0_vh.tif
+  <source-item-id>-<mgrs-tile>-beta0_vv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_hh.tif
+  <source-item-id>-<mgrs-tile>-gamma0_hv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_vh.tif
+  <source-item-id>-<mgrs-tile>-gamma0_vv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_lut.tif
+  <source-item-id>-<mgrs-tile>-thumbnail.png
   item.json
 <output-root>/catalog.json
 <output-root>/collection.json
