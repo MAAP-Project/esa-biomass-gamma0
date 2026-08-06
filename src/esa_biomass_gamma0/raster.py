@@ -16,6 +16,12 @@ POLARIZATIONS = ("HH", "HV", "VH", "VV")
 THUMBNAIL_POLARIZATIONS = ("HH", "HV", "VV")
 
 
+def product_asset_filename(key: str, source_item_id: str, tile_id: str) -> str:
+    """Return a job-unique product filename for one asset key."""
+    extension = ".png" if key == "thumbnail" else ".tif"
+    return f"{source_item_id}-{tile_id}-{key}{extension}"
+
+
 def warp_scientific_arrays(
     beta0: np.ndarray,
     gamma0: np.ndarray,
@@ -98,7 +104,7 @@ def write_scientific_cogs(
     paths: dict[str, Path] = {}
 
     for key, data, quantity, polarization in assets:
-        path = directory / f"{key}.tif"
+        path = directory / product_asset_filename(key, source_item_id, grid.tile_id)
         _write_cog(
             path,
             data,

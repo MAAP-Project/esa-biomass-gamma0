@@ -30,8 +30,12 @@ def test_release_deploy_waits_for_maap_deployment_jobs() -> None:
     assert workflow["env"]["MAAP_OGC_DEPLOYMENT_JOBS_URL"] == (
         "https://api.maap-project.org/api/ogc/deploymentJobs"
     )
-    assert "wait_for_deployment" in script
-    assert '[ "$status" != "202" ] || wait_for_deployment' in script
+    assert "monitor_deployments" in script
+    assert '[ "$status" != "202" ] || pending_workflows+=("$workflow")' in script
+    assert script.index("deploy dps/staged") < script.index("deploy dps/fetch")
+    assert script.index("deploy dps/fetch") < script.index(
+        'monitor_deployments "${pending_workflows[@]}"'
+    )
     assert "MAAP deployment timed out" in script
     assert "MAAP deployment failed" in script
     assert ".links[]?" in script

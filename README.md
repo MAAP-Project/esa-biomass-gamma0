@@ -226,21 +226,22 @@ Each accepted source granule and MGRS tile produces:
 
 ```text
 <tile>/<acquisition-date>/<source-item-id>/
-  beta0_hh.tif
-  beta0_hv.tif
-  beta0_vh.tif
-  beta0_vv.tif
-  gamma0_hh.tif
-  gamma0_hv.tif
-  gamma0_vh.tif
-  gamma0_vv.tif
-  gamma0_lut.tif
-  thumbnail.png
+  <source-item-id>-<tile>-beta0_hh.tif
+  <source-item-id>-<tile>-beta0_hv.tif
+  <source-item-id>-<tile>-beta0_vh.tif
+  <source-item-id>-<tile>-beta0_vv.tif
+  <source-item-id>-<tile>-gamma0_hh.tif
+  <source-item-id>-<tile>-gamma0_hv.tif
+  <source-item-id>-<tile>-gamma0_vh.tif
+  <source-item-id>-<tile>-gamma0_vv.tif
+  <source-item-id>-<tile>-gamma0_lut.tif
+  <source-item-id>-<tile>-thumbnail.png
   item.json
 ```
 
 The job also writes `catalog.json` at the output root, with direct links to each
-Item. Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
+Item. Asset filenames include their source Item ID and MGRS tile so they remain
+unique across the job output. Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
 Gamma0 is linear intensity, not dB. Every Item provides descriptive
 polarization-specific titles, media types, and roles for all ten assets.
 

@@ -112,16 +112,16 @@ For every accepted pair, stage this product directory beside its final destinati
 
 ```text
 <output-root>/<mgrs-tile>/<acquisition-date>/<source-item-id>/
-  beta0_hh.tif
-  beta0_hv.tif
-  beta0_vh.tif
-  beta0_vv.tif
-  gamma0_hh.tif
-  gamma0_hv.tif
-  gamma0_vh.tif
-  gamma0_vv.tif
-  gamma0_lut.tif
-  thumbnail.png
+  <source-item-id>-<mgrs-tile>-beta0_hh.tif
+  <source-item-id>-<mgrs-tile>-beta0_hv.tif
+  <source-item-id>-<mgrs-tile>-beta0_vh.tif
+  <source-item-id>-<mgrs-tile>-beta0_vv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_hh.tif
+  <source-item-id>-<mgrs-tile>-gamma0_hv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_vh.tif
+  <source-item-id>-<mgrs-tile>-gamma0_vv.tif
+  <source-item-id>-<mgrs-tile>-gamma0_lut.tif
+  <source-item-id>-<mgrs-tile>-thumbnail.png
   item.json
 ```
 
@@ -135,7 +135,7 @@ The nine GeoTIFFs must be:
 - tagged with quantity, units, source Item ID, and processing version; and
 - tagged with polarization for Beta0 and Gamma0 assets.
 
-All nine COGs share CRS, bounds, transform, width, height, and nodata. Their COG tags use `QUANTITY=beta0_amplitude`, `QUANTITY=gamma0_linear_intensity`, or `QUANTITY=gamma_nought_calibration_factor`, plus `UNITS=1`, source Item ID, processing version, and polarization where applicable. GammaNought is a single-band calibration-factor asset. The PNG thumbnail is display-only `uint8` RGB: Gamma0 HH, HV, and VV form red, green, and blue channels respectively, each stretched independently from its finite 2nd to 98th percentile. It does not replace a scientific asset or claim COG properties.
+Asset filenames include the source Item ID and MGRS tile so they are unique within a job output. All nine COGs share CRS, bounds, transform, width, height, and nodata. Their COG tags use `QUANTITY=beta0_amplitude`, `QUANTITY=gamma0_linear_intensity`, or `QUANTITY=gamma_nought_calibration_factor`, plus `UNITS=1`, source Item ID, processing version, and polarization where applicable. GammaNought is a single-band calibration-factor asset. The PNG thumbnail is display-only `uint8` RGB: Gamma0 HH, HV, and VV form red, green, and blue channels respectively, each stretched independently from its finite 2nd to 98th percentile. It does not replace a scientific asset or claim COG properties.
 
 Validate all COGs and the thumbnail before writing `item.json` and atomically promoting the staged directory.
 
@@ -210,16 +210,16 @@ Each Item has nine scientific COG data assets and one display-only thumbnail:
 
 | Asset key | Filename | Quantity | Polarization | Roles |
 |---|---|---|---|---|
-| `beta0_hh` | `beta0_hh.tif` | Beta0 amplitude | HH | `data` |
-| `beta0_hv` | `beta0_hv.tif` | Beta0 amplitude | HV | `data` |
-| `beta0_vh` | `beta0_vh.tif` | Beta0 amplitude | VH | `data` |
-| `beta0_vv` | `beta0_vv.tif` | Beta0 amplitude | VV | `data` |
-| `gamma0_hh` | `gamma0_hh.tif` | linear Gamma0 intensity | HH | `data` |
-| `gamma0_hv` | `gamma0_hv.tif` | linear Gamma0 intensity | HV | `data` |
-| `gamma0_vh` | `gamma0_vh.tif` | linear Gamma0 intensity | VH | `data` |
-| `gamma0_vv` | `gamma0_vv.tif` | linear Gamma0 intensity | VV | `data` |
-| `gamma0_lut` | `gamma0_lut.tif` | bilinearly resampled Gamma0 multiplicative factor | n/a | `data` |
-| `thumbnail` | `thumbnail.png` | display-only RGB composite | n/a | `thumbnail`, `overview` |
+| `beta0_hh` | `<source-item-id>-<mgrs-tile>-beta0_hh.tif` | Beta0 amplitude | HH | `data` |
+| `beta0_hv` | `<source-item-id>-<mgrs-tile>-beta0_hv.tif` | Beta0 amplitude | HV | `data` |
+| `beta0_vh` | `<source-item-id>-<mgrs-tile>-beta0_vh.tif` | Beta0 amplitude | VH | `data` |
+| `beta0_vv` | `<source-item-id>-<mgrs-tile>-beta0_vv.tif` | Beta0 amplitude | VV | `data` |
+| `gamma0_hh` | `<source-item-id>-<mgrs-tile>-gamma0_hh.tif` | linear Gamma0 intensity | HH | `data` |
+| `gamma0_hv` | `<source-item-id>-<mgrs-tile>-gamma0_hv.tif` | linear Gamma0 intensity | HV | `data` |
+| `gamma0_vh` | `<source-item-id>-<mgrs-tile>-gamma0_vh.tif` | linear Gamma0 intensity | VH | `data` |
+| `gamma0_vv` | `<source-item-id>-<mgrs-tile>-gamma0_vv.tif` | linear Gamma0 intensity | VV | `data` |
+| `gamma0_lut` | `<source-item-id>-<mgrs-tile>-gamma0_lut.tif` | bilinearly resampled Gamma0 multiplicative factor | n/a | `data` |
+| `thumbnail` | `<source-item-id>-<mgrs-tile>-thumbnail.png` | display-only RGB composite | n/a | `thumbnail`, `overview` |
 
 Each scientific asset includes its media type, Projection extension fields, a one-band Raster extension entry, and SAR polarization metadata where applicable. Raster-band metadata uses `float32`, `-9999.0` nodata, and unit `1`; the Gamma0 asset titles and COG quantity tags identify linear intensity. The thumbnail has image media type and thumbnail/overview roles; its PNG pixels carry RGB color interpretation but the STAC asset has no scientific Raster or SAR claims.
 
