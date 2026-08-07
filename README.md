@@ -33,64 +33,96 @@ local paths and retrieves no credentials. Choose **fetch** when submitting an
 Item ID is more convenient. Fetch retrieves MAAP-managed secrets inside the job,
 creates temporary local files, and runs the same staged processing workflow.
 
-## Submit a MAAP job
+## Search STAC and submit MAAP jobs
 
-The examples assume both algorithms are registered at version `v0.1.0`. The
-tracked CWLs in `dps/staged/` and `dps/fetch/` are the registered interfaces;
-[DEVELOPMENT.md](DEVELOPMENT.md) describes the release-managed deployment path.
+`maap-py` 5.1 and later submit OGC Application Package jobs with
+`submit_job(process_id, inputs, queue)`. A deployed process selects its release;
+do not pass an algorithm version to the call. This example searches the BIOMASS
+STAC catalog and starts one fetch job for each matched Item. Set `max_items`
+to a small value before submitting a large batch.
+
+```python
+from maap.maap import MAAP
+from pystac_client import Client
+
+maap = MAAP()
+
+QUEUE = "maap-dps-worker-16gb"
+TAG = "mosaic-test"
+ALGORITHM_NAME = "esa_biomass_gamma0_fetch"
+ALGORITHM_VERSION = "0.1.3"
+
+response = maap.list_algorithms()
+response.raise_for_status()
+
+process_id = None
+for process in response.json()["processes"]:
+    if process["id"] == ALGORITHM_NAME and process["version"] == ALGORITHM_VERSION:
+        process_id = process["processID"]
+        print(f"found process id {process_id}")
+        break
+
+if not process_id:
+    raise ValueError(
+        f"could not find a process matching {ALGORITHM_NAME} {ALGORITHM_VERSION}"
+    )
+
+
+search = Client.open("https://catalog.maap.eo.esa.int/catalogue/").search(
+    collections=["BiomassLevel1b"],
+    bbox=[102, 60, 112, 63],
+    datetime="2026-06-01/2026-06-30",
+)
+
+items = search.items()
+
+for item in items:
+    response = maap.submit_job(
+        process_id=process_id,
+        inputs={"item_id": item.id},
+        queue=QUEUE,
+        tag=TAG,
+    )
+    response.raise_for_status()
+```
+
+The response is a `requests.Response`; the `Location` header identifies the
+asynchronous job. Get its ID from the final URL path and monitor it with
+`maap.get_job_status(job_id)`, or use the MAAP Jobs UI.
+
+Inside each fetch job, `MAAP().secrets.get_secret` retrieves
+`ESA_MAAP_CLIENT_SECRET` and `ESA_OFFLINE_TOKEN` from MAAP secrets. Configure
+those secrets in MAAP before submitting a job; never include credentials in
+`inputs`. Both algorithms return the same `./output` Directory.
 
 ### Staged files
 
-Submit `esa_biomass_gamma0_staged` with the source files already available as
-MAAP `File` inputs:
+Submit `esa_biomass_gamma0_staged` when the four source files are available as
+MAAP-accessible URLs. OGC `File` inputs use an `href` object:
 
 ```python
 from maap.maap import MAAP
 
-maap = MAAP()
-job = maap.submitJob(
-    identifier="biomass-gamma0-staged-example",
-    algo_id="esa_biomass_gamma0_staged",
-    version="v0.1.2",
-    queue="maap-dps-worker-8gb",
-    source_item="s3://<bucket>/source-item.json",
-    beta0_tiff="s3://<bucket>/enclosure.tif",
-    radiometry_lut="s3://<bucket>/enclosure.nc",
-    annotation_xml="s3://<bucket>/annotation.xml",
-)
-```
-
-### Item-ID fetch
-
-Submit `esa_biomass_gamma0_fetch` when MAAP should retrieve the source. Configure
-these secrets once through MAAP, never as fetch-job inputs or environment
-variables:
-
-```python
-import os
-
-from maap.maap import MAAP
-
-maap = MAAP()
-maap.secrets.add_secret("ESA_MAAP_CLIENT_SECRET", os.getenv("ESA_MAAP_CLIENT_SECRET"))
-maap.secrets.add_secret("ESA_OFFLINE_TOKEN", os.getenv("ESA_OFFLINE_TOKEN"))
-job = maap.submitJob(
-    identifier="biomass-gamma0-fetch-example",
-    algo_id="esa_biomass_gamma0_fetch",
-    version="v0.1.0",
+response = MAAP().submit_job(
+    process_id="esa_biomass_gamma0_staged",
+    inputs={
+        "source_item": {"href": "s3://<bucket>/source-item.json"},
+        "beta0_tiff": {"href": "s3://<bucket>/enclosure.tif"},
+        "radiometry_lut": {"href": "s3://<bucket>/enclosure.nc"},
+        "annotation_xml": {"href": "s3://<bucket>/annotation.xml"},
+    },
     queue="<MAAP queue with at least 16 GB>",
-    item_id="<BIOMASS L1B STAC Item ID>",
+    tag="biomass-gamma0-staged-example",
 )
+response.raise_for_status()
+print(response.headers["Location"])
 ```
-
-Fetch calls `MAAP().secrets.get_secret` for those names only, enables network
-access only for materialization, and removes temporary source files on exit.
-Both algorithms return the same `./output` Directory.
 
 Use a queue available to your MAAP organization that meets the algorithm's
 resource request: staged requires 16 GB and eight cores; fetch requires 16 GB
-and four cores. The job runs asynchronously; use the MAAP Jobs UI or
-`job.retrieve_attributes()` to monitor it.
+and four cores. The tracked CWLs in `dps/staged/` and `dps/fetch/` define the
+registered interfaces; [DEVELOPMENT.md](DEVELOPMENT.md) describes the
+release-managed deployment path.
 
 ### Local CLI
 
@@ -130,8 +162,8 @@ logger = logging.getLogger("esa-biomass-gamma0")
 
 search = Client.open("https://catalog.maap.eo.esa.int/catalogue/").search(
     collections=["BiomassLevel1b"],
-    bbox=[102, 60, 112, 63],
-    max_items=10,
+    bbox=[108.15,62.22,108.44,62.31],
+    max_items=5,
     sortby="-datetime",
 )
 
@@ -152,6 +184,7 @@ export ESA_OFFLINE_TOKEN=...
 
 while IFS= read -r item_id; do
   uv run --extra fetch process-gamma0 local "$item_id"
+  uv run main.py --out-dir /tmp/$item_id "$item_id"
 done < /tmp/item-ids.txt
 ```
 
