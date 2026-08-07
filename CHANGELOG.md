@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.2...v0.1.3) (2026-08-06)
+
+
+### Bug Fixes
+
+* write assets to unique file basenames ([#12](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/12)) ([1ce30a6](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/1ce30a6f0227d75b8e699d9c81362e69c868d6ee))
+
 ## [0.1.2](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.1...v0.1.2) (2026-08-06)
 
 
