@@ -184,7 +184,6 @@ export ESA_OFFLINE_TOKEN=...
 
 while IFS= read -r item_id; do
   uv run --extra fetch process-gamma0 local "$item_id"
-  uv run main.py --out-dir /tmp/$item_id "$item_id"
 done < /tmp/item-ids.txt
 ```
 
@@ -197,6 +196,15 @@ staged source files. Processing always replaces existing products.
 ITEM_ID=BIO_S2_DGM__1S_20260601T121355_20260601T121415_T_G01_M03_C07_T008_F100_02_DSD6MY
 uv run process-gamma0 local --output-root /tmp/${ITEM_ID} ${ITEM_ID}
 ```
+
+To download only an Item's Beta0 TIFF for local inspection, use the same local
+credentials with `scripts/download_beta0.py`:
+
+```bash
+uv run --extra fetch python scripts/download_beta0.py "$ITEM_ID"
+```
+
+It writes `/tmp/<source filename>` by default; use `--output <path>` to change it.
 
 ### Browse a local output root with eoAPI
 
