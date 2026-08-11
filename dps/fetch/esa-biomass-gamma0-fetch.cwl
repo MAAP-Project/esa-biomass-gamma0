@@ -40,7 +40,9 @@ $graph:
     id: main
     requirements:
       DockerRequirement:
+        # x-release-please-start-version
         dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-fetch:v0.1.3
+        # x-release-please-end
       NetworkAccess:
         networkAccess: true
       ResourceRequirement:

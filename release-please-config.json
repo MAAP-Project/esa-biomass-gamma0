@@ -29,6 +29,14 @@
         },
         {
           "type": "generic",
+          "path": "dps/staged/esa-biomass-gamma0-staged.cwl"
+        },
+        {
+          "type": "generic",
+          "path": "dps/fetch/esa-biomass-gamma0-fetch.cwl"
+        },
+        {
+          "type": "generic",
           "path": "uv.lock"
         },
         {
