@@ -1,3 +1,9 @@
+@media screen and (min-width: 76.25em) {
+  .md-grid {
+    max-width: 80rem;
+  }
+}
+
 /* Fix xarray HTML representations in Jupyter notebook renderings.
    mkdocs-material overrides xarray's grid layout and does not provide the
    Jupyter/PyData CSS variables used by xarray's embedded stylesheet. */
