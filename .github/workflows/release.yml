@@ -40,8 +40,8 @@ jobs:
           grep -Fx "version = \"$version\"" pyproject.toml
           for mode in staged fetch; do
             workflow="dps/$mode/esa-biomass-gamma0-$mode.cwl"
-            grep -Fqx "s:softwareVersion: $version" "$workflow"
-            grep -Fqx "s:version: $version" "$workflow"
+            grep -Fqx "s:softwareVersion: $version # x-release-please-version" "$workflow"
+            grep -Fqx "s:version: $version # x-release-please-version" "$workflow"
             grep -Fqx "        dockerPull: ghcr.io/${GITHUB_REPOSITORY,,}-$mode:$RELEASE_TAG" "$workflow"
             uvx --from cwltool cwltool --validate "$workflow"
             uvx --with pyyaml --from ogc-ap-validator ap-validator --detail errors "$workflow"
