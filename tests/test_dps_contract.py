@@ -289,8 +289,11 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     release = workflow[True]["release"]
     deploy = workflow["jobs"]["deploy"]
     deploy_script = deploy["steps"][-1]["run"]
+    validate_script = workflow["jobs"]["validate"]["steps"][-1]["run"]
 
     assert release == {"types": ["published"]}
+    assert "s:softwareVersion: $version # x-release-please-version" in validate_script
+    assert "s:version: $version # x-release-please-version" in validate_script
     assert workflow["env"]["MAAP_OGC_PROCESSES_URL"] == (
         "https://api.maap-project.org/api/ogc/processes"
     )
