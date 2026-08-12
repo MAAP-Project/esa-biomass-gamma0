@@ -168,7 +168,7 @@ jobs:
               fi
               case "$deployment_url" in
                 http://*|https://*) ;;
-                /*) deployment_url="https://api.maap-project.org$deployment_url" ;;
+                /*) deployment_url="${MAAP_OGC_DEPLOYMENT_JOBS_URL%/deploymentJobs}$deployment_url" ;;
                 *) deployment_url="$MAAP_OGC_DEPLOYMENT_JOBS_URL/$deployment_url" ;;
               esac
               deployment_urls["$workflow"]="$deployment_url"
