@@ -74,6 +74,35 @@ def test_warps_beta0_gamma0_and_lut_directly_to_the_target_grid() -> None:
     assert np.isfinite(warped_lut).any()
 
 
+def test_batches_polarizations_in_four_worker_gdal_warps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The four-polarization arrays share one bounded-parallel GDAL warp each."""
+    calls: list[tuple[tuple[int, ...], tuple[int, ...], int]] = []
+
+    def reproject(
+        source: np.ndarray, destination: np.ndarray, **kwargs: object
+    ) -> None:
+        num_threads = kwargs["num_threads"]
+        assert isinstance(num_threads, int)
+        calls.append((source.shape, destination.shape, num_threads))
+        destination.fill(1)
+
+    monkeypatch.setattr("esa_biomass_gamma0.raster.reproject", reproject)
+    grid = _grid()
+    beta0, gamma0, gamma_nought = _arrays()
+
+    assert (
+        warp_scientific_arrays(beta0, gamma0, gamma_nought, _geolocation(grid), grid)
+        is not None
+    )
+    assert calls == [
+        ((4, 10, 10), (4, 10, 10), 4),
+        ((4, 10, 10), (4, 10, 10), 4),
+        ((10, 10), (10, 10), 4),
+    ]
+
+
 @pytest.mark.parametrize(
     ("beta0", "gamma0", "gamma_nought", "geolocation", "message"),
     [
