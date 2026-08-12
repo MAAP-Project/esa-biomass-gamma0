@@ -189,7 +189,7 @@
       ],
       "url": "https://github.com/MAAP-Project/esa-biomass-gamma0",
       "processing:software": {
-        "esa-biomass-gamma0": "0.2.2"
+        "esa-biomass-gamma0": "0.2.3"
       }
     }
   ]

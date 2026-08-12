@@ -48,7 +48,7 @@
       "P-SAR"
     ],
     "processing:software": {
-      "esa-biomass-gamma0": "0.2.2"
+      "esa-biomass-gamma0": "0.2.3"
     },
     "maap:partial_coverage": true,
     "proj:code": "EPSG:32632",

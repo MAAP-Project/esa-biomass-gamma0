@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.2...v0.2.3) (2026-08-12)
+
+
+### Bug Fixes
+
+* batch warp operations more intelligently ([#25](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/25)) ([adfe936](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/adfe936723581dcb9a40e7147ddcf07c4b91c601))
+
 ## [0.2.2](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.1...v0.2.2) (2026-08-12)
 
 
