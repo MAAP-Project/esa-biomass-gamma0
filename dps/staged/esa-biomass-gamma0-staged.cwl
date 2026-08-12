@@ -8,8 +8,8 @@ s:author:
   - class: s:Organization
     s:name: MAAP Project
 s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
-s:softwareVersion: 0.1.3 # x-release-please-version
-s:version: 0.1.3 # x-release-please-version
+s:softwareVersion: 0.2.0 # x-release-please-version
+s:version: 0.2.0 # x-release-please-version
 s:keywords:
   - ESA
   - BIOMASS
@@ -56,7 +56,7 @@ $graph:
     requirements:
       DockerRequirement:
         # x-release-please-start-version
-        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.1.3
+        dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-staged:v0.2.0
         # x-release-please-end
       NetworkAccess:
         networkAccess: true
