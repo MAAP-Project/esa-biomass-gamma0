@@ -27,6 +27,7 @@ class LutCoordinates:
     azimuth: np.ndarray
     slant_range: np.ndarray
     shape: tuple[int, int]
+    dimensions: tuple[str, str]
 
 
 def parse_annotation(annotation_xml: bytes | Path) -> CalibrationMetadata:
@@ -101,7 +102,40 @@ def read_lut_coordinates(lut_path: Path) -> LutCoordinates:
     azimuth.setflags(write=False)
     slant_range.setflags(write=False)
 
-    return LutCoordinates(azimuth=azimuth, slant_range=slant_range, shape=shape)
+    return LutCoordinates(
+        azimuth=azimuth,
+        slant_range=slant_range,
+        shape=shape,
+        dimensions=expected_dimensions,
+    )
+
+
+def read_geometry_coordinates(
+    lut_path: Path, coordinates: LutCoordinates
+) -> tuple[np.ndarray, np.ndarray]:
+    """Read geometry-LUT longitude and latitude arrays aligned to LUT axes."""
+    with Dataset(lut_path) as dataset:
+        try:
+            geometry = dataset.groups["geometry"]
+            longitude = geometry.variables["longitude"]
+            latitude = geometry.variables["latitude"]
+        except KeyError as error:
+            raise ValueError(f"geometry LUT: missing {error.args[0]}") from error
+
+        if (
+            longitude.dimensions != coordinates.dimensions
+            or latitude.dimensions != coordinates.dimensions
+            or longitude.shape != coordinates.shape
+            or latitude.shape != coordinates.shape
+        ):
+            raise ValueError(
+                "geometry LUT: longitude and latitude must use (azimuth, range) axes"
+            )
+
+        return (
+            np.asarray(longitude[:], dtype="float64"),
+            np.asarray(latitude[:], dtype="float64"),
+        )
 
 
 def window_coordinates(

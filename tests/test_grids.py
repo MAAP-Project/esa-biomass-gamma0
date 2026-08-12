@@ -1,14 +1,14 @@
-"""Tests for MGRS grids and GCP radar windows."""
+"""Tests for MGRS grids and geometry-LUT radar windows."""
 
 import numpy as np
-import pytest
-from rasterio.control import GroundControlPoint
+from pyproj import Transformer
 from rasterio.windows import Window
 
+from esa_biomass_gamma0.calibration import CalibrationMetadata, LutCoordinates
 from esa_biomass_gamma0.grids import (
     candidate_grids,
-    gcp_pixel_window,
-    shifted_gcps,
+    geometry_coordinates,
+    geometry_window,
     target_grid,
 )
 
@@ -60,82 +60,55 @@ def test_candidate_grids_retain_zone_and_latitude_band_identifiers() -> None:
     )
 
 
-def test_back_projects_and_clips_a_gcp_window() -> None:
-    """A densified perimeter maps through GCPs to the expected local source window."""
+def test_selects_a_padded_geometry_lut_window_and_samples_it() -> None:
+    """A tile maps through LUT geometry to a padded local Beta0 geolocation grid."""
     grid = target_grid("32TPR")
-    xmin, ymin, xmax, ymax = grid.bounds
-    gcps = [
-        GroundControlPoint(row=0, col=0, x=xmin, y=ymax),
-        GroundControlPoint(row=0, col=99, x=xmax, y=ymax),
-        GroundControlPoint(row=99, col=0, x=xmin, y=ymin),
-        GroundControlPoint(row=99, col=99, x=xmax, y=ymin),
-    ]
+    metadata = CalibrationMetadata(1, 1, (0, 1))
+    coordinates = LutCoordinates(
+        azimuth=np.arange(100, dtype="float64"),
+        slant_range=np.arange(100, dtype="float64"),
+        shape=(100, 100),
+        dimensions=("azimuth", "range"),
+    )
+    x, y = np.meshgrid(
+        np.linspace(grid.bounds[0], grid.bounds[2], 100),
+        np.linspace(grid.bounds[3], grid.bounds[1], 100),
+    )
+    longitude, latitude = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
 
-    window = gcp_pixel_window(grid, gcps, grid.crs, 100, 100, padding_pixels=8)
+    window = geometry_window(
+        longitude,
+        latitude,
+        grid,
+        metadata,
+        coordinates,
+        100,
+        100,
+        padding_pixels=8,
+    )
 
     assert window == Window(0, 0, 100, 100)
-
-
-@pytest.mark.parametrize(
-    ("row_limits", "col_limits", "expected"),
-    [
-        ((-10, 50), (20, 80), Window(12, 0, 77, 59)),
-        ((50, 110), (20, 80), Window(12, 42, 77, 58)),
-        ((20, 80), (-10, 50), Window(0, 12, 59, 77)),
-        ((20, 80), (50, 110), Window(42, 12, 58, 77)),
-    ],
-)
-def test_gcp_window_padding_clips_at_each_raster_edge(
-    row_limits: tuple[int, int],
-    col_limits: tuple[int, int],
-    expected: Window,
-) -> None:
-    """Padding remains within the source raster at every edge."""
-    grid = target_grid("32TPR")
-    xmin, ymin, xmax, ymax = grid.bounds
-    row_start, row_stop = row_limits
-    col_start, col_stop = col_limits
-    gcps = [
-        GroundControlPoint(row=row_start, col=col_start, x=xmin, y=ymax),
-        GroundControlPoint(row=row_start, col=col_stop, x=xmax, y=ymax),
-        GroundControlPoint(row=row_stop, col=col_start, x=xmin, y=ymin),
-        GroundControlPoint(row=row_stop, col=col_stop, x=xmax, y=ymin),
-    ]
-
-    assert (
-        gcp_pixel_window(grid, gcps, grid.crs, 100, 100, padding_pixels=8) == expected
+    sampled_longitude, sampled_latitude = geometry_coordinates(
+        longitude, latitude, coordinates, metadata, Window(20, 10, 40, 30)
     )
+    assert sampled_longitude.shape == sampled_latitude.shape == (30, 40)
+    np.testing.assert_allclose(sampled_longitude, longitude[10:40, 20:60])
+    np.testing.assert_allclose(sampled_latitude, latitude[10:40, 20:60])
 
 
-def test_rejects_missing_gcps_and_shifts_without_mutating_them() -> None:
-    """GCP prerequisites fail clearly and local shifts preserve source controls."""
+def test_rejects_nonmatching_or_nonoverlapping_geometry() -> None:
+    """Invalid geometry fails and an outside tile is skipped without a GCP fallback."""
     grid = target_grid("32TPR")
-    with np.testing.assert_raises_regex(ValueError, "GCPs"):
-        gcp_pixel_window(grid, [], grid.crs, 100, 100)
-    with np.testing.assert_raises_regex(ValueError, "GCPs"):
-        gcp_pixel_window(
-            grid, [GroundControlPoint(row=0, col=0, x=0, y=0)], None, 100, 100
-        )
-
-    outside_gcps = [
-        GroundControlPoint(row=100, col=100, x=grid.bounds[0], y=grid.bounds[3]),
-        GroundControlPoint(row=200, col=200, x=grid.bounds[2], y=grid.bounds[1]),
-    ]
-    assert gcp_pixel_window(grid, outside_gcps, grid.crs, 100, 100) is None
-
-    non_finite_gcps = [
-        GroundControlPoint(row=np.nan, col=np.nan, x=grid.bounds[0], y=grid.bounds[3]),
-        GroundControlPoint(row=np.nan, col=np.nan, x=grid.bounds[2], y=grid.bounds[1]),
-    ]
-    with pytest.warns(RuntimeWarning):
-        assert gcp_pixel_window(grid, non_finite_gcps, grid.crs, 100, 100) is None
-
-    original = [GroundControlPoint(row=30, col=40, x=1, y=2)]
-    shifted = shifted_gcps(original, Window(20, 10, 5, 5))
-    assert (shifted[0].row, shifted[0].col, shifted[0].x, shifted[0].y) == (
-        20,
-        20,
-        1,
-        2,
+    metadata = CalibrationMetadata(1, 1, (0, 1))
+    coordinates = LutCoordinates(
+        azimuth=np.arange(10, dtype="float64"),
+        slant_range=np.arange(10, dtype="float64"),
+        shape=(10, 10),
+        dimensions=("azimuth", "range"),
     )
-    assert (original[0].row, original[0].col) == (30, 40)
+    longitude = np.full((10, 10), 0.0)
+    latitude = np.full((10, 10), 0.0)
+
+    assert geometry_window(longitude, latitude, grid, metadata, coordinates, 10, 10) is None
+    with np.testing.assert_raises_regex(ValueError, "shape"):
+        geometry_window(longitude[:-1], latitude[:-1], grid, metadata, coordinates, 10, 10)

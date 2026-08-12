@@ -11,6 +11,7 @@ from rasterio.windows import Window
 from esa_biomass_gamma0.calibration import (
     calculate_gamma0,
     parse_annotation,
+    read_geometry_coordinates,
     read_lut_coordinates,
     sample_gamma_nought,
     window_coordinates,
@@ -77,6 +78,25 @@ def test_samples_a_bracketed_lut_window_in_physical_coordinates(tmp_path: Path) 
     assert azimuth.tolist() == [30.0, 40.0]
     assert slant_range.tolist() == [10.0, 15.0]
     np.testing.assert_allclose(sampled, [[310.0, 315.0], [410.0, 415.0]])
+
+
+def test_reads_geometry_lut_aligned_to_radiometry_axes(tmp_path: Path) -> None:
+    """Longitude and latitude must use the same physical LUT dimensions as GammaNought."""
+    lut_path = tmp_path / "radiometry.nc"
+    _write_lut(lut_path)
+    with Dataset(lut_path, "a") as dataset:
+        geometry = dataset.createGroup("geometry")
+        longitude = geometry.createVariable("longitude", "f8", ("azimuth", "range"))
+        latitude = geometry.createVariable("latitude", "f8", ("azimuth", "range"))
+        longitude[:] = np.arange(36, dtype="float64").reshape(6, 6)
+        latitude[:] = longitude[:]
+
+    longitude, latitude = read_geometry_coordinates(
+        lut_path, read_lut_coordinates(lut_path)
+    )
+
+    assert longitude.shape == latitude.shape == (6, 6)
+    np.testing.assert_array_equal(longitude, latitude)
 
 
 def test_windowed_sampling_matches_the_full_frame_slice(tmp_path: Path) -> None:

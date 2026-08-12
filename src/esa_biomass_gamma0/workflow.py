@@ -8,8 +8,6 @@ from pathlib import Path
 
 import numpy as np
 from rasterio import open as open_raster
-from rasterio.control import GroundControlPoint
-from rasterio.crs import CRS
 from rasterio.io import DatasetReader
 from rasterio.windows import Window
 
@@ -19,6 +17,7 @@ from esa_biomass_gamma0.calibration import (
     LutCoordinates,
     calculate_gamma0,
     parse_annotation,
+    read_geometry_coordinates,
     read_lut_coordinates,
     sample_gamma_nought,
     window_coordinates,
@@ -26,8 +25,8 @@ from esa_biomass_gamma0.calibration import (
 from esa_biomass_gamma0.grids import (
     TileGrid,
     candidate_grids,
-    gcp_pixel_window,
-    shifted_gcps,
+    geometry_coordinates,
+    geometry_window,
 )
 from esa_biomass_gamma0.raster import (
     product_asset_filename,
@@ -76,16 +75,13 @@ def process_source(
 
     metadata = parse_annotation(source.annotation_xml)
     coordinates = read_lut_coordinates(source.radiometry_lut)
+    longitude, latitude = read_geometry_coordinates(source.radiometry_lut, coordinates)
     output_root = Path(output_root)
 
     written = skipped_no_data = failed = 0
     with open_raster(source.beta0_tiff) as dataset:
         if dataset.count != 4:
             raise ValueError("Beta0 must contain exactly four polarizations")
-
-        gcps, gcp_crs = dataset.gcps
-        if not gcps or gcp_crs is None:
-            raise ValueError("Beta0 is missing GCPs or a GCP CRS")
 
         grids = candidate_grids(source.bbox)
         for grid in grids:
@@ -95,10 +91,12 @@ def process_source(
                 / source.datetime.date().isoformat()
                 / source.item_id
             )
-            window = gcp_pixel_window(
+            window = geometry_window(
+                longitude,
+                latitude,
                 grid,
-                gcps,
-                gcp_crs,
+                metadata,
+                coordinates,
                 dataset.height,
                 dataset.width,
                 padding_pixels=window_padding_pixels,
@@ -114,8 +112,8 @@ def process_source(
                     grid=grid,
                     dataset=dataset,
                     window=window,
-                    gcps=gcps,
-                    gcp_crs=gcp_crs,
+                    longitude=longitude,
+                    latitude=latitude,
                     metadata=metadata,
                     coordinates=coordinates,
                     processing_version=processing_version,
@@ -147,8 +145,8 @@ def _write_product(
     grid: TileGrid,
     dataset: DatasetReader,
     window: Window,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS,
+    longitude: np.ndarray,
+    latitude: np.ndarray,
     metadata: CalibrationMetadata,
     coordinates: LutCoordinates,
     processing_version: str,
@@ -160,14 +158,10 @@ def _write_product(
         source.radiometry_lut, coordinates, azimuth, slant_range
     )
     gamma0 = calculate_gamma0(beta0, gamma_nought)
-    warped = warp_scientific_arrays(
-        beta0,
-        gamma0,
-        gamma_nought,
-        shifted_gcps(gcps, window),
-        gcp_crs,
-        grid,
+    geolocation = geometry_coordinates(
+        longitude, latitude, coordinates, metadata, window
     )
+    warped = warp_scientific_arrays(beta0, gamma0, gamma_nought, geolocation, grid)
     if warped is None:
         return False
     warped_beta0, warped_gamma0, warped_gamma_nought = warped
@@ -195,7 +189,7 @@ def _write_product(
         grid,
         temporary,
         processing_version=processing_version,
-        geometry=source_footprint(grid, gcps, gcp_crs, dataset.height, dataset.width),
+        geometry=source_footprint(grid, geolocation),
     )
     write_item(item, temporary / "item.json")
     _promote_product(temporary, directory)

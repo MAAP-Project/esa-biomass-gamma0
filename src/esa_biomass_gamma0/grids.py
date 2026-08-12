@@ -1,4 +1,4 @@
-"""Authoritative MGRS target grids and GCP radar-window selection."""
+"""Authoritative MGRS target grids and geometry-LUT radar-window selection."""
 
 import math
 from dataclasses import dataclass
@@ -8,10 +8,16 @@ from affine import Affine
 from mgrs import MGRS
 from mgrs.core import MGRSError
 from pyproj import Transformer
-from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
-from rasterio.transform import GCPTransformer
 from rasterio.windows import Window
+from scipy.ndimage import map_coordinates
+
+from esa_biomass_gamma0.calibration import (
+    CalibrationMetadata,
+    LutCoordinates,
+    lut_pixel_coordinates,
+    window_coordinates,
+)
 
 MGRS_TILE_SIZE_METERS = 100_000.0
 RESOLUTION_METERS = 25.0
@@ -57,65 +63,103 @@ def candidate_grids(bbox: tuple[float, float, float, float]) -> list[TileGrid]:
     return [target_grid(tile_id) for tile_id in _candidate_tile_ids(bbox)]
 
 
-def gcp_pixel_window(
+def geometry_window(
+    longitude: np.ndarray,
+    latitude: np.ndarray,
     grid: TileGrid,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS | None,
+    metadata: CalibrationMetadata,
+    coordinates: LutCoordinates,
     source_height: int,
     source_width: int,
     padding_pixels: int = 64,
-    boundary_spacing_meters: float = 1_000.0,
 ) -> Window | None:
-    """Back-project a densified tile perimeter to a padded, clipped radar window."""
-    if not gcps or gcp_crs is None:
-        raise ValueError("Beta0 is missing GCPs or a GCP CRS")
+    """Return the padded source window whose geometry-LUT nodes cover one tile."""
     if source_height <= 0 or source_width <= 0 or padding_pixels < 0:
         raise ValueError("source dimensions and padding must be valid")
+    _validate_geometry(longitude, latitude, coordinates)
 
-    boundary = _densified_boundary(grid.bounds, boundary_spacing_meters)
-    to_gcp = Transformer.from_crs(grid.crs, gcp_crs, always_xy=True)
-    x, y = to_gcp.transform(boundary[:, 0], boundary[:, 1])
-    with GCPTransformer(gcps) as transformer:
-        rows, cols = transformer.rowcol(x, y)
-    rows = np.asarray(rows, dtype="float64")
-    cols = np.asarray(cols, dtype="float64")
-    valid = np.isfinite(rows) & np.isfinite(cols)
-    if not valid.any():
+    to_grid = Transformer.from_crs("EPSG:4326", grid.crs, always_xy=True)
+    x, y = to_grid.transform(longitude, latitude)
+    within_grid = (
+        np.isfinite(x)
+        & np.isfinite(y)
+        & (x >= grid.bounds[0])
+        & (x <= grid.bounds[2])
+        & (y >= grid.bounds[1])
+        & (y <= grid.bounds[3])
+    )
+    geometry_rows, geometry_columns = np.nonzero(within_grid)
+    if not geometry_rows.size:
         return None
-    rows, cols = rows[valid], cols[valid]
+
+    azimuth, slant_range = window_coordinates(
+        metadata, Window(0, 0, source_width, source_height)
+    )
+    lut_rows, lut_columns = lut_pixel_coordinates(coordinates, azimuth, slant_range)
+    if not (np.all(np.diff(lut_rows) > 0) and np.all(np.diff(lut_columns) > 0)):
+        raise ValueError("geometry LUT axes do not map monotonically to Beta0 pixels")
+
+    source_rows = np.interp(
+        geometry_rows, lut_rows, np.arange(source_height, dtype="float64")
+    )
+    source_columns = np.interp(
+        geometry_columns, lut_columns, np.arange(source_width, dtype="float64")
+    )
+    row_start = max(0, math.floor(source_rows.min()) - padding_pixels)
+    row_stop = min(source_height, math.ceil(source_rows.max()) + padding_pixels + 1)
+    column_start = max(0, math.floor(source_columns.min()) - padding_pixels)
+    column_stop = min(
+        source_width, math.ceil(source_columns.max()) + padding_pixels + 1
+    )
+    return Window(
+        column_start,
+        row_start,
+        column_stop - column_start,
+        row_stop - row_start,
+    )
+
+
+def geometry_coordinates(
+    longitude: np.ndarray,
+    latitude: np.ndarray,
+    coordinates: LutCoordinates,
+    metadata: CalibrationMetadata,
+    window: Window,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Bilinearly sample geometry-LUT longitude and latitude onto one window."""
+    _validate_geometry(longitude, latitude, coordinates)
+    azimuth, slant_range = window_coordinates(metadata, window)
+    rows, columns = lut_pixel_coordinates(coordinates, azimuth, slant_range)
+    row_coordinates, column_coordinates = np.broadcast_arrays(
+        rows[:, np.newaxis], columns[np.newaxis, :]
+    )
+    sample_coordinates = np.stack((row_coordinates, column_coordinates))
+    geolocation = tuple(
+        map_coordinates(
+            values,
+            sample_coordinates,
+            order=1,
+            mode="nearest",
+            prefilter=False,
+        ).astype("float64")
+        for values in (longitude, latitude)
+    )
+    if not (np.isfinite(geolocation[0]) & np.isfinite(geolocation[1])).any():
+        raise ValueError("geometry LUT has no finite geolocation in the source window")
+    return geolocation
+
+
+def _validate_geometry(
+    longitude: np.ndarray, latitude: np.ndarray, coordinates: LutCoordinates
+) -> None:
+    """Require geometry arrays to align with the validated LUT coordinate axes."""
     if (
-        rows.max() < 0
-        or cols.max() < 0
-        or rows.min() >= source_height
-        or cols.min() >= source_width
+        longitude.shape != coordinates.shape
+        or latitude.shape != coordinates.shape
+        or longitude.ndim != 2
+        or latitude.ndim != 2
     ):
-        return None
-
-    row_start = max(0, math.floor(rows.min()) - padding_pixels)
-    row_stop = min(source_height, math.ceil(rows.max()) + padding_pixels + 1)
-    col_start = max(0, math.floor(cols.min()) - padding_pixels)
-    col_stop = min(source_width, math.ceil(cols.max()) + padding_pixels + 1)
-    if row_start >= row_stop or col_start >= col_stop:
-        return None
-    return Window(col_start, row_start, col_stop - col_start, row_stop - row_start)
-
-
-def shifted_gcps(
-    gcps: list[GroundControlPoint], window: Window
-) -> list[GroundControlPoint]:
-    """Shift full-image GCP pixel coordinates into a local radar-window frame."""
-    return [
-        GroundControlPoint(
-            row=gcp.row - window.row_off,
-            col=gcp.col - window.col_off,
-            x=gcp.x,
-            y=gcp.y,
-            z=gcp.z,
-            id=gcp.id,
-            info=gcp.info,
-        )
-        for gcp in gcps
-    ]
+        raise ValueError("geometry LUT must match the radiometry (azimuth, range) shape")
 
 
 def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:
@@ -181,20 +225,3 @@ def _intersects(
         and first[1] <= second[3]
         and first[3] >= second[1]
     )
-
-
-def _densified_boundary(
-    bounds: tuple[float, float, float, float], spacing_meters: float
-) -> np.ndarray:
-    if spacing_meters <= 0:
-        raise ValueError("boundary spacing must be positive")
-    xmin, ymin, xmax, ymax = bounds
-    ring = np.asarray(
-        ((xmin, ymin), (xmax, ymin), (xmax, ymax), (xmin, ymax), (xmin, ymin)),
-        dtype="float64",
-    )
-    segments = []
-    for start, end in zip(ring[:-1], ring[1:], strict=True):
-        count = max(1, math.ceil(np.hypot(*(end - start)) / spacing_meters))
-        segments.append(start + (end - start) * np.arange(count)[:, None] / count)
-    return np.concatenate(segments)

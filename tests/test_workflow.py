@@ -7,7 +7,7 @@ from netCDF4 import Dataset
 import numpy as np
 import pytest
 from rasterio import open as open_raster
-from rasterio.control import GroundControlPoint
+from pyproj import Transformer
 from rasterio.crs import CRS
 
 from conftest import write_item as write_source_item
@@ -29,10 +29,8 @@ def _grid() -> TileGrid:
     )
 
 
-def _write_beta0(
-    path: Path, grid: TileGrid, *, nodata: bool = False, gcps: bool = True
-) -> None:
-    """Write a four-band local staged Beta0 raster with synthetic GCPs."""
+def _write_beta0(path: Path, *, nodata: bool = False) -> None:
+    """Write a four-band local staged Beta0 raster without embedded GCPs."""
     data = np.full((4, 10, 10), -9999.0 if nodata else 2.0, dtype="float32")
     with open_raster(
         path,
@@ -45,27 +43,9 @@ def _write_beta0(
         nodata=-9999.0,
     ) as dataset:
         dataset.write(data)
-        if gcps:
-            dataset.gcps = (
-                [
-                    GroundControlPoint(
-                        row=0, col=0, x=grid.bounds[0], y=grid.bounds[3]
-                    ),
-                    GroundControlPoint(
-                        row=0, col=9, x=grid.bounds[2], y=grid.bounds[3]
-                    ),
-                    GroundControlPoint(
-                        row=9, col=9, x=grid.bounds[2], y=grid.bounds[1]
-                    ),
-                    GroundControlPoint(
-                        row=9, col=0, x=grid.bounds[0], y=grid.bounds[1]
-                    ),
-                ],
-                grid.crs,
-            )
 
 
-def _write_lut(path: Path) -> None:
+def _write_lut(path: Path, grid: TileGrid) -> None:
     """Write a ten-by-ten GammaNought LUT in the annotation coordinate system."""
     with Dataset(path, "w") as dataset:
         dataset.createDimension("azimuth", 10)
@@ -79,6 +59,16 @@ def _write_lut(path: Path) -> None:
             "gammaNought", "f4", ("azimuth", "range")
         )
         gamma_nought[:] = 0.5
+        geometry = dataset.createGroup("geometry")
+        longitude = geometry.createVariable("longitude", "f8", ("azimuth", "range"))
+        latitude = geometry.createVariable("latitude", "f8", ("azimuth", "range"))
+        x, y = np.meshgrid(
+            np.linspace(grid.bounds[0], grid.bounds[2], 10),
+            np.linspace(grid.bounds[3], grid.bounds[1], 10),
+        )
+        longitude[:], latitude[:] = Transformer.from_crs(
+            grid.crs, "EPSG:4326", always_xy=True
+        ).transform(x, y)
 
 
 def _write_annotation(path: Path) -> None:
@@ -98,8 +88,8 @@ def _staged_source(
 ) -> None:
     """Replace generic staged fixtures with real workflow inputs."""
     write_source_item(staged_paths["source_item"])
-    _write_beta0(staged_paths["beta0_tiff"], grid, **beta0)
-    _write_lut(staged_paths["radiometry_lut"])
+    _write_beta0(staged_paths["beta0_tiff"], **beta0)
+    _write_lut(staged_paths["radiometry_lut"], grid)
     _write_annotation(staged_paths["annotation_xml"])
 
 
@@ -130,7 +120,7 @@ def test_processes_and_recovers_one_complete_tile_product(
     assert is_complete_product(directory)
 
 
-def test_skips_all_nodata_tiles_and_rejects_missing_gcps(
+def test_skips_all_nodata_tiles_without_requiring_embedded_gcps(
     tmp_path: Path, staged_paths: dict[str, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Expected tile rejection writes only the valid empty root STAC documents."""
@@ -145,7 +135,3 @@ def test_skips_all_nodata_tiles_and_rejects_missing_gcps(
     assert result.skipped_no_data == 1
     assert result.failed == 0
     assert not list((tmp_path / "output").rglob("item.json"))
-
-    _staged_source(staged_paths, grid, gcps=False)
-    with pytest.raises(ValueError, match="GCP"):
-        process_source(**staged_paths, output_root=tmp_path / "missing-gcps")

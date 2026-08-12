@@ -11,7 +11,8 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterExtension
 from pystac.extensions.render import RenderExtension
 from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
-from rasterio.control import GroundControlPoint
+import numpy as np
+from pyproj import Transformer
 from rasterio.crs import CRS
 
 from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
@@ -97,19 +98,18 @@ def test_builds_a_valid_item_for_complete_local_assets(
 ) -> None:
     """One product Item carries its tile grid, data assets, and safe provenance."""
     directory, source, grid = _product(tmp_path, staged_paths)
-    gcps = [
-        GroundControlPoint(row=0, col=0, x=grid.bounds[0], y=grid.bounds[3]),
-        GroundControlPoint(row=0, col=9, x=grid.bounds[2], y=grid.bounds[3]),
-        GroundControlPoint(row=9, col=9, x=grid.bounds[2], y=grid.bounds[1]),
-        GroundControlPoint(row=9, col=0, x=grid.bounds[0], y=grid.bounds[1]),
-    ]
+    x, y = np.meshgrid(
+        np.linspace(grid.bounds[0], grid.bounds[2], 10),
+        np.linspace(grid.bounds[3], grid.bounds[1], 10),
+    )
+    geolocation = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
 
     item = build_item(
         source,
         grid,
         directory,
         processing_version=PACKAGE_VERSION,
-        geometry=source_footprint(grid, gcps, grid.crs, 10, 10),
+        geometry=source_footprint(grid, geolocation),
     )
     write_item(item, directory / "item.json")
 

@@ -28,9 +28,8 @@ from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterBand, RasterExtension
 from pystac.extensions.render import Render, RenderExtension
 from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
-from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
-from rasterio.transform import Affine, GCPTransformer, array_bounds
+from rasterio.transform import Affine, array_bounds
 
 from esa_biomass_gamma0.grids import TileGrid
 from esa_biomass_gamma0.raster import (
@@ -94,38 +93,34 @@ SCIENTIFIC_QUANTITIES = {
 
 
 def source_footprint(
-    grid: TileGrid,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS | None,
-    source_height: int,
-    source_width: int,
+    grid: TileGrid, geolocation: tuple[np.ndarray, np.ndarray]
 ) -> dict[str, Any] | None:
-    """Return the GCP-derived source footprint clipped to a tile, if reliable."""
-    if not gcps or gcp_crs is None or source_height < 2 or source_width < 2:
+    """Return a geometry-LUT source-window footprint clipped to one tile."""
+    if len(geolocation) != 2:
         return None
-    rows, columns = _source_boundary(source_height, source_width)
+    longitude, latitude = (np.asarray(values, dtype="float64") for values in geolocation)
+    if longitude.shape != latitude.shape or longitude.ndim != 2:
+        return None
+
+    rows, columns = _source_boundary(*longitude.shape)
+    longitude = longitude[rows, columns]
+    latitude = latitude[rows, columns]
+    if not (np.isfinite(longitude) & np.isfinite(latitude)).all():
+        return None
 
     try:
-        with GCPTransformer(gcps) as transformer:
-            x, y = transformer.xy(rows, columns)
-
-        to_grid = Transformer.from_crs(gcp_crs, grid.crs, always_xy=True)
-        x, y = to_grid.transform(x, y)
+        to_grid = Transformer.from_crs("EPSG:4326", grid.crs, always_xy=True)
+        x, y = to_grid.transform(longitude, latitude)
         polygon = _clip_to_bounds(list(zip(x, y, strict=True)), grid.bounds)
-
         if len(polygon) < 3 or not np.isfinite(polygon).all():
             return None
 
         to_wgs84 = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True)
         longitude, latitude = to_wgs84.transform(*zip(*polygon, strict=True))
-
-    except Exception:  # GDAL transformers can fail on malformed but present GCPs.
+    except Exception:
         return None
 
     coordinates = list(zip(longitude, latitude, strict=True))
-    if not np.isfinite(coordinates).all():
-        return None
-
     coordinates.append(coordinates[0])
     return {"type": "Polygon", "coordinates": [[list(point) for point in coordinates]]}
 
@@ -502,7 +497,9 @@ def _local_asset_path(directory: Path, href: str) -> Path:
 
 
 def _source_boundary(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
-    """Return a small closed pixel perimeter for GCP source-footprint estimation."""
+    """Return a small closed pixel perimeter for source-footprint estimation."""
+    if height < 2 or width < 2:
+        return np.array([], dtype="intp"), np.array([], dtype="intp")
     samples = np.linspace(0, 1, 33)
     rows = np.concatenate(
         (
@@ -511,7 +508,7 @@ def _source_boundary(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
             np.full_like(samples[1:], height - 1),
             (1 - samples[1:]) * (height - 1),
         )
-    )
+    ).round().astype("intp")
     columns = np.concatenate(
         (
             samples * (width - 1),
@@ -519,7 +516,7 @@ def _source_boundary(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
             (1 - samples[1:]) * (width - 1),
             np.zeros_like(samples[1:]),
         )
-    )
+    ).round().astype("intp")
     return rows, columns
 
 
