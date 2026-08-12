@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.3...v0.2.0) (2026-08-12)
+
+
+### Features
+
+* use lat/lon from LUT to georeference the beta0 array ([#15](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/15)) ([626b4ec](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/626b4ecce9e6eef422b497db2eb3e7c85769d8de))
+
+
+### Bug Fixes
+
+* update CWL Docker tags with release please ([#20](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/20)) ([37270dd](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/37270dd5286e45a45855af7a523f7b86da088373))
+
 ## [0.1.3](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.2...v0.1.3) (2026-08-06)
 
 
