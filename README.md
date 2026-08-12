@@ -253,6 +253,10 @@ DPS jobs always produce fixed 25 m products and replace existing products.
 
 ## Release deployment
 
+CI runs pre-commit hooks, a strict documentation build, CWL validation, tests,
+and container smoke tests on pull requests. Merges to `main` deploy the
+MkDocs site to GitHub Pages after its checks pass.
+
 Release Please turns conventional commits merged to `main` into a reviewed
 release PR. Merging that PR creates the GitHub Release, publishes immutable
 version-tagged staged and fetch images, and registers or updates both MAAP

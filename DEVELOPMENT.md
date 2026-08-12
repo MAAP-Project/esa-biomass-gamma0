@@ -18,10 +18,12 @@ Both return an `output` `Directory`.
 
 ## Release deployment
 
-Pull requests validate the test suite, both CWLs, and both container variants.
-They never publish images or contact MAAP. Merges to `main` also publish
-`latest` staged and fetch images to GHCR for development only; tracked CWLs
-never reference `latest`.
+Pull requests validate pre-commit hooks, the strict MkDocs build, the test
+suite, both CWLs, and both container variants. They never publish images or
+contact MAAP. Merges to `main` also publish `latest` staged and fetch images to
+GHCR for development only and deploy the documentation site to GitHub Pages;
+tracked CWLs never reference `latest`. Enable GitHub Pages with GitHub Actions
+as its source in the repository settings before the first documentation deploy.
 
 [Release Please](.github/workflows/release-please.yml) runs after conventional
 commits merge to `main`. It opens or updates a release PR with the package
@@ -62,6 +64,8 @@ uvx --with pyyaml --from ogc-ap-validator ap-validator --detail errors \
 uvx --from cwltool cwltool --validate dps/fetch/esa-biomass-gamma0-fetch.cwl
 uvx --with pyyaml --from ogc-ap-validator ap-validator --detail errors \
   dps/fetch/esa-biomass-gamma0-fetch.cwl
+uv run --frozen --group dev pre-commit run --all-files
+uv run --frozen --group docs mkdocs build --strict
 uv run --frozen --group dev pytest
 ```
 

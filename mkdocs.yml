@@ -1,0 +1,11 @@
+site_name: ESA BIOMASS Gamma0 MGRS DPS
+site_description: Fixed-grid Gamma0 products from ESA BIOMASS Level-1B data.
+repo_url: https://github.com/MAAP-Project/esa-biomass-gamma0
+repo_name: MAAP-Project/esa-biomass-gamma0
+theme:
+  name: material
+plugins:
+  - mkdocs-jupyter
+nav:
+  - Overview: index.md
+  - Proof of concept notebook: poc.ipynb

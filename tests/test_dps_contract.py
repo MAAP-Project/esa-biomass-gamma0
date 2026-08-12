@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import tomllib
 
@@ -165,9 +166,7 @@ def test_release_please_owns_versioned_release_files() -> None:
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json",
         "uv.lock",
     }
-    assert {
-        path: entry["type"] for path, entry in extra_files_by_path.items()
-    } == {
+    assert {path: entry["type"] for path, entry in extra_files_by_path.items()} == {
         "dps/staged/esa-biomass-gamma0-staged.cwl": "generic",
         "dps/fetch/esa-biomass-gamma0-fetch.cwl": "generic",
         "examples/stac/collection.json": "json",
@@ -189,10 +188,13 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert extra_files_by_path["examples/stac/collection.json"]["jsonpath"] == (
         '$.providers[*]["processing:software"]["esa-biomass-gamma0"]'
     )
-    assert extra_files_by_path[
-        "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
-        "gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
-    ]["jsonpath"] == '$.properties["processing:software"]["esa-biomass-gamma0"]'
+    assert (
+        extra_files_by_path[
+            "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
+            "gamma0-BIOMASS_EXAMPLE_001-32TPR.json"
+        ]["jsonpath"]
+        == '$.properties["processing:software"]["esa-biomass-gamma0"]'
+    )
     assert workflow[True]["push"] == {"branches": ["main"]}
     [release_step] = workflow["jobs"]["release-please"]["steps"]
     assert release_step["id"] == "release-please"
@@ -242,6 +244,50 @@ def test_ci_builds_and_smoke_tests_both_images_without_maap_access() -> None:
     assert "MAAP" not in str(workflow)
 
 
+def test_quality_automation_is_pinned_and_covers_docs() -> None:
+    """CI runs local quality gates and all Actions use immutable revisions."""
+    ci = _load_yaml(ROOT / ".github" / "workflows" / "ci.yml")
+    pages = _load_yaml(ROOT / ".github" / "workflows" / "docs.yml")
+    dependabot = _load_yaml(ROOT / ".github" / "dependabot.yml")
+    pre_commit = _load_yaml(ROOT / ".pre-commit-config.yaml")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    validate_script = ci["jobs"]["validate"]["steps"][-1]["run"]
+    assert "pre-commit run --all-files" in validate_script
+    assert "mkdocs build --strict" in validate_script
+    assert pages[True]["push"] == {"branches": ["main"]}
+    assert pages[True]["workflow_dispatch"] is None
+    assert pages["jobs"]["deploy"]["environment"]["name"] == "github-pages"
+    assert dependabot["version"] == 2
+    assert {update["package-ecosystem"] for update in dependabot["updates"]} == {
+        "uv",
+        "github-actions",
+    }
+    assert {
+        hook["id"] for repository in pre_commit["repos"] for hook in repository["hooks"]
+    } == {"ruff", "ruff-format", "sync-with-uv"}
+    assert pyproject["tool"]["ruff"]["target-version"] == "py313"
+    assert {"pre-commit", "ruff"} <= {
+        dependency.partition(">=")[0]
+        for dependency in pyproject["dependency-groups"]["dev"]
+    }
+    assert {"mkdocs-material", "mkdocstrings[python]"} <= {
+        dependency.partition(">=")[0]
+        for dependency in pyproject["dependency-groups"]["docs"]
+    }
+
+    for path in (ROOT / ".github" / "workflows").glob("*.yml"):
+        action_revisions = re.findall(
+            r"^\s*(?:-\s+)?uses:\s+[^@\s]+@([^\s#]+)",
+            path.read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+        assert action_revisions
+        assert all(
+            re.fullmatch(r"[0-9a-f]{40}", revision) for revision in action_revisions
+        )
+
+
 def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     """A published release validates, publishes, then updates the two OGC processes."""
     workflow = _load_yaml(ROOT / ".github" / "workflows" / "release.yml")
@@ -269,6 +315,7 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     for job in workflow["jobs"].values():
         checkout = job["steps"][0]
         assert checkout["with"]["ref"] == "${{ github.event.release.tag_name }}"
+        assert checkout["with"]["persist-credentials"] is False
     assert "git rev-parse HEAD" in str(workflow["jobs"])
 
 
