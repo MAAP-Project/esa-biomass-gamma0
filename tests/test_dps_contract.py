@@ -165,7 +165,7 @@ def test_release_please_owns_versioned_release_files() -> None:
         "examples/stac/collection.json": "json",
         "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json": "json",
-        "uv.lock": "generic",
+        "uv.lock": "toml",
     }
     assert (
         expected_extra_file_types.items()
@@ -196,8 +196,15 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert release_step["with"]["token"] == "${{ secrets.RELEASE_PLEASE_TOKEN }}"
     assert "GITHUB_TOKEN" not in str(release_step)
 
-    lock = (ROOT / "uv.lock").read_text()
-    assert f'version = "{PACKAGE_VERSION}" # x-release-please-version' in lock
+    assert extra_files_by_path["uv.lock"]["jsonpath"] == (
+        "$.package[?(@.name == 'esa-biomass-gamma0')].version"
+    )
+    lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    assert [
+        package["version"]
+        for package in lock["package"]
+        if package["name"] == "esa-biomass-gamma0"
+    ] == [PACKAGE_VERSION]
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert (
         f'ALGORITHM_VERSION = "{PACKAGE_VERSION}"  # x-release-please-version' in readme

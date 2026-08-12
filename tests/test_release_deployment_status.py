@@ -39,6 +39,10 @@ def test_release_deploy_waits_for_maap_deployment_jobs() -> None:
     assert "MAAP deployment timed out" in script
     assert "MAAP deployment failed" in script
     assert ".links[]?" in script
+    assert (
+        'deployment_url="${MAAP_OGC_DEPLOYMENT_JOBS_URL%/deploymentJobs}$deployment_url"'
+        in script
+    )
     assert 'select(.rel == "monitor" and .type == "application/json")' in script
 
 

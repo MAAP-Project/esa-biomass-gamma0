@@ -16,8 +16,9 @@
           "path": "dps/fetch/esa-biomass-gamma0-fetch.cwl"
         },
         {
-          "type": "generic",
-          "path": "uv.lock"
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name == 'esa-biomass-gamma0')].version"
         },
         {
           "type": "generic",
