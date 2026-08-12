@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,7 @@ requires-python = ">=3.13"
 dependencies = [
     "mgrs>=1.5.4",
     "netcdf4>=1.7.4",
-    "packaging>=26.2",
+    "packaging>=26.3",
     "pyproj>=3.7.2",
     "pystac>=1.15.2",
     "rasterio>=1.5.0",
@@ -58,5 +58,5 @@ dev = [
 docs = [
     "mkdocs-jupyter>=0.26.3",
     "mkdocs-material>=9.7.6",
-    "mkdocstrings[python]>=1.0.3",
+    "mkdocstrings[python]>=1.0.6",
 ]
