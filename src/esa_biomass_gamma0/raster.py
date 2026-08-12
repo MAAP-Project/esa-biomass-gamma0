@@ -270,14 +270,14 @@ def _warp_stack(
     data: np.ndarray, longitude: np.ndarray, latitude: np.ndarray, grid: TileGrid
 ) -> np.ndarray:
     """Directly warp every polarization in one radar-space stack."""
-    return np.stack([_warp_array(band, longitude, latitude, grid) for band in data])
+    return _warp_array(data, longitude, latitude, grid)
 
 
 def _warp_array(
     data: np.ndarray, longitude: np.ndarray, latitude: np.ndarray, grid: TileGrid
 ) -> np.ndarray:
     """Directly bilinearly warp one geometry-LUT source array to one tile grid."""
-    destination = np.full(grid.shape, np.nan, dtype="float32")
+    destination = np.full(data.shape[:-2] + grid.shape, np.nan, dtype="float32")
 
     reproject(
         source=data,
@@ -289,6 +289,7 @@ def _warp_array(
         src_nodata=np.nan,
         dst_nodata=np.nan,
         resampling=Resampling.bilinear,
+        num_threads=4,
     )
     return destination
 

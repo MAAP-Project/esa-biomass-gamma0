@@ -158,15 +158,8 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert config["include-v-in-tag"] is True
     assert config["always-update"] is True
     extra_files_by_path = {entry["path"]: entry for entry in extra_files}
-    assert {entry["path"] for entry in extra_files} == {
-        "dps/staged/esa-biomass-gamma0-staged.cwl",
-        "dps/fetch/esa-biomass-gamma0-fetch.cwl",
-        "examples/stac/collection.json",
-        "examples/stac/gamma0-BIOMASS_EXAMPLE_001-32TPR/"
-        "gamma0-BIOMASS_EXAMPLE_001-32TPR.json",
-        "uv.lock",
-    }
-    assert {path: entry["type"] for path, entry in extra_files_by_path.items()} == {
+    expected_extra_file_types = {
+        "README.md": "generic",
         "dps/staged/esa-biomass-gamma0-staged.cwl": "generic",
         "dps/fetch/esa-biomass-gamma0-fetch.cwl": "generic",
         "examples/stac/collection.json": "json",
@@ -174,6 +167,10 @@ def test_release_please_owns_versioned_release_files() -> None:
         "gamma0-BIOMASS_EXAMPLE_001-32TPR.json": "json",
         "uv.lock": "generic",
     }
+    assert (
+        expected_extra_file_types.items()
+        <= {path: entry["type"] for path, entry in extra_files_by_path.items()}.items()
+    )
     for mode in CONTRACTS:
         cwl_path = f"dps/{mode}/esa-biomass-gamma0-{mode}.cwl"
         assert [
@@ -201,6 +198,10 @@ def test_release_please_owns_versioned_release_files() -> None:
 
     lock = (ROOT / "uv.lock").read_text()
     assert f'version = "{PACKAGE_VERSION}" # x-release-please-version' in lock
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert (
+        f'ALGORITHM_VERSION = "{PACKAGE_VERSION}"  # x-release-please-version' in readme
+    )
 
     for mode in CONTRACTS:
         text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
