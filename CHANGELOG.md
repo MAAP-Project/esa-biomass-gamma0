@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.0...v0.2.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* validate annotated CWL release versions ([#21](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/21)) ([adbb748](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/adbb74823a0379f9a77b657685ef55b99d037230))
+
 ## [0.2.0](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.1.3...v0.2.0) (2026-08-12)
 
 
