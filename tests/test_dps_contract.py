@@ -177,13 +177,8 @@ def test_release_please_owns_versioned_release_files() -> None:
     for mode in CONTRACTS:
         cwl_path = f"dps/{mode}/esa-biomass-gamma0-{mode}.cwl"
         assert [
-            entry["jsonpath"]
-            for entry in extra_files
-            if entry["path"] == cwl_path and entry["type"] == "yaml"
-        ] == ["$['s:softwareVersion']", "$['s:version']"]
-        assert [
             entry["type"] for entry in extra_files if entry["path"] == cwl_path
-        ] == ["yaml", "yaml", "generic"]
+        ] == ["generic"]
 
     assert extra_files_by_path["examples/stac/collection.json"]["jsonpath"] == (
         '$.providers[*]["processing:software"]["esa-biomass-gamma0"]'
@@ -209,7 +204,7 @@ def test_release_please_owns_versioned_release_files() -> None:
 
     for mode in CONTRACTS:
         text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
-        assert "x-release-please-version" not in text
+        assert text.count("x-release-please-version") == 2
         assert text.count("x-release-please-start-version") == 1
         assert text.count("x-release-please-end") == 1
         assert (
