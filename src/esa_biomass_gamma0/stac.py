@@ -98,7 +98,9 @@ def source_footprint(
     """Return a geometry-LUT source-window footprint clipped to one tile."""
     if len(geolocation) != 2:
         return None
-    longitude, latitude = (np.asarray(values, dtype="float64") for values in geolocation)
+    longitude, latitude = (
+        np.asarray(values, dtype="float64") for values in geolocation
+    )
     if longitude.shape != latitude.shape or longitude.ndim != 2:
         return None
 
@@ -501,22 +503,30 @@ def _source_boundary(height: int, width: int) -> tuple[np.ndarray, np.ndarray]:
     if height < 2 or width < 2:
         return np.array([], dtype="intp"), np.array([], dtype="intp")
     samples = np.linspace(0, 1, 33)
-    rows = np.concatenate(
-        (
-            np.zeros_like(samples),
-            samples[1:] * (height - 1),
-            np.full_like(samples[1:], height - 1),
-            (1 - samples[1:]) * (height - 1),
+    rows = (
+        np.concatenate(
+            (
+                np.zeros_like(samples),
+                samples[1:] * (height - 1),
+                np.full_like(samples[1:], height - 1),
+                (1 - samples[1:]) * (height - 1),
+            )
         )
-    ).round().astype("intp")
-    columns = np.concatenate(
-        (
-            samples * (width - 1),
-            np.full_like(samples[1:], width - 1),
-            (1 - samples[1:]) * (width - 1),
-            np.zeros_like(samples[1:]),
+        .round()
+        .astype("intp")
+    )
+    columns = (
+        np.concatenate(
+            (
+                samples * (width - 1),
+                np.full_like(samples[1:], width - 1),
+                (1 - samples[1:]) * (width - 1),
+                np.zeros_like(samples[1:]),
+            )
         )
-    ).round().astype("intp")
+        .round()
+        .astype("intp")
+    )
     return rows, columns
 
 

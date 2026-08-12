@@ -74,7 +74,9 @@ def test_selects_a_padded_geometry_lut_window_and_samples_it() -> None:
         np.linspace(grid.bounds[0], grid.bounds[2], 100),
         np.linspace(grid.bounds[3], grid.bounds[1], 100),
     )
-    longitude, latitude = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
+    longitude, latitude = Transformer.from_crs(
+        grid.crs, "EPSG:4326", always_xy=True
+    ).transform(x, y)
 
     window = geometry_window(
         longitude,
@@ -109,6 +111,11 @@ def test_rejects_nonmatching_or_nonoverlapping_geometry() -> None:
     longitude = np.full((10, 10), 0.0)
     latitude = np.full((10, 10), 0.0)
 
-    assert geometry_window(longitude, latitude, grid, metadata, coordinates, 10, 10) is None
+    assert (
+        geometry_window(longitude, latitude, grid, metadata, coordinates, 10, 10)
+        is None
+    )
     with np.testing.assert_raises_regex(ValueError, "shape"):
-        geometry_window(longitude[:-1], latitude[:-1], grid, metadata, coordinates, 10, 10)
+        geometry_window(
+            longitude[:-1], latitude[:-1], grid, metadata, coordinates, 10, 10
+        )

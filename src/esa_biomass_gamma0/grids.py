@@ -159,7 +159,9 @@ def _validate_geometry(
         or longitude.ndim != 2
         or latitude.ndim != 2
     ):
-        raise ValueError("geometry LUT must match the radiometry (azimuth, range) shape")
+        raise ValueError(
+            "geometry LUT must match the radiometry (azimuth, range) shape"
+        )
 
 
 def _candidate_tile_ids(bbox: tuple[float, float, float, float]) -> list[str]:

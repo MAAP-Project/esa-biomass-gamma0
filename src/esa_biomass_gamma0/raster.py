@@ -256,7 +256,9 @@ def _validated_geolocation(
     """Return matching longitude and latitude arrays with usable source coverage."""
     if len(geolocation) != 2:
         raise ValueError("geolocation requires longitude and latitude arrays")
-    longitude, latitude = (np.asarray(values, dtype="float64") for values in geolocation)
+    longitude, latitude = (
+        np.asarray(values, dtype="float64") for values in geolocation
+    )
     if longitude.shape != shape or latitude.shape != shape:
         raise ValueError("geolocation must match the scientific source window shape")
     if not (np.isfinite(longitude) & np.isfinite(latitude)).any():
@@ -268,9 +270,7 @@ def _warp_stack(
     data: np.ndarray, longitude: np.ndarray, latitude: np.ndarray, grid: TileGrid
 ) -> np.ndarray:
     """Directly warp every polarization in one radar-space stack."""
-    return np.stack(
-        [_warp_array(band, longitude, latitude, grid) for band in data]
-    )
+    return np.stack([_warp_array(band, longitude, latitude, grid) for band in data])
 
 
 def _warp_array(

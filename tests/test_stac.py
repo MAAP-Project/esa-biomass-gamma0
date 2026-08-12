@@ -102,7 +102,9 @@ def test_builds_a_valid_item_for_complete_local_assets(
         np.linspace(grid.bounds[0], grid.bounds[2], 10),
         np.linspace(grid.bounds[3], grid.bounds[1], 10),
     )
-    geolocation = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
+    geolocation = Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(
+        x, y
+    )
 
     item = build_item(
         source,
