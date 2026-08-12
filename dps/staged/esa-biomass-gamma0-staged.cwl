@@ -8,8 +8,10 @@ s:author:
   - class: s:Organization
     s:name: MAAP Project
 s:codeRepository: https://github.com/MAAP-Project/esa-biomass-gamma0
-s:softwareVersion: 0.2.1 # x-release-please-version
-s:version: 0.2.1 # x-release-please-version
+# x-release-please-start-version
+s:softwareVersion: 0.2.1
+s:version: 0.2.1
+# x-release-please-end
 s:keywords:
   - ESA
   - BIOMASS

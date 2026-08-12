@@ -204,9 +204,9 @@ def test_release_please_owns_versioned_release_files() -> None:
 
     for mode in CONTRACTS:
         text = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text()
-        assert text.count("x-release-please-version") == 2
-        assert text.count("x-release-please-start-version") == 1
-        assert text.count("x-release-please-end") == 1
+        assert "x-release-please-version" not in text
+        assert text.count("x-release-please-start-version") == 2
+        assert text.count("x-release-please-end") == 2
         assert (
             f"dockerPull: ghcr.io/maap-project/esa-biomass-gamma0-{mode}:v"
             f"{PACKAGE_VERSION}"
@@ -292,8 +292,17 @@ def test_release_workflow_publishes_then_deploys_both_tracked_cwls() -> None:
     validate_script = workflow["jobs"]["validate"]["steps"][-1]["run"]
 
     assert release == {"types": ["published"]}
-    assert "s:softwareVersion: $version # x-release-please-version" in validate_script
-    assert "s:version: $version # x-release-please-version" in validate_script
+    assert 'grep -Fqx "s:softwareVersion: $version"' in validate_script
+    assert 'grep -Fqx "s:version: $version"' in validate_script
+    for mode in ("staged", "fetch"):
+        cwl = (ROOT / "dps" / mode / f"esa-biomass-gamma0-{mode}.cwl").read_text(
+            encoding="utf-8"
+        )
+        assert " # x-release-please-version" not in cwl
+        assert cwl.index("# x-release-please-start-version") < cwl.index(
+            "s:softwareVersion:"
+        )
+        assert cwl.index("s:version:") < cwl.index("# x-release-please-end")
     assert workflow["env"]["MAAP_OGC_PROCESSES_URL"] == (
         "https://api.maap-project.org/api/ogc/processes"
     )
