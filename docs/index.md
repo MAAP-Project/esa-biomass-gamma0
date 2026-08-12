@@ -18,4 +18,5 @@ RGB thumbnail, and a STAC Item.
 - [Usage and local development](https://github.com/MAAP-Project/esa-biomass-gamma0#readme)
 - [Release and MAAP deployment](https://github.com/MAAP-Project/esa-biomass-gamma0/blob/main/DEVELOPMENT.md)
 - [Workflow specification](https://github.com/MAAP-Project/esa-biomass-gamma0/blob/main/dev-docs/specs/gamma0-mgrs-utm-stac-workflow.md)
-- [Proof-of-concept notebook](poc.ipynb)
+- [Level 1b georeferencing notebook](georeferencing.ipynb)
+- [Gamma0 Correction Algorithm proof-of-concept notebook](poc.ipynb)
