@@ -20,6 +20,10 @@
           "path": "uv.lock"
         },
         {
+          "type": "generic",
+          "path": "README.md"
+        },
+        {
           "type": "json",
           "path": "examples/stac/collection.json",
           "jsonpath": "$.providers[*][\"processing:software\"][\"esa-biomass-gamma0\"]"
