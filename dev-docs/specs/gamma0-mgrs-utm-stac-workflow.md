@@ -28,8 +28,8 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 - Output resolution is exactly 25 m, close to the source Beta0 25 m ground-range and 22.36 m azimuth sampling.
 - `mgrs` derives each standard 100 km tile's ID, UTM CRS, hemisphere, and exact 100,000 m bounds. Code must not parse tile IDs or use an approximate fishnet as authoritative geometry.
 - The output grid has shape `[4000, 4000]`.
-- The input Beta0 TIFF has GCP geolocation. Its GCP transformer maps densified map-space tile boundaries to radar pixels and warped window data to UTM.
-- The source STAC bbox filters candidates only. GCP overlap determines whether a tile has coverage.
+- The radiometry NetCDF provides `geometry/longitude` and `geometry/latitude` LUTs aligned to the validated `(azimuth, range)` axes. They map Beta0 source pixels to WGS84 position after physical-coordinate interpolation.
+- The source STAC bbox filters candidates only. Geometry-LUT overlap determines whether a tile has coverage.
 - Gamma0 is linear intensity: `Beta0_amplitude² × gammaNought`. It is not dB.
 - Processing arrays use `NaN` for missing values. Written COGs use `-9999.0` as `float32` nodata.
 - A source granule may yield no accepted tiles. That run still writes a valid empty Catalog.
@@ -41,14 +41,14 @@ staged algorithm: source Item JSON + Beta0 TIFF + LUT NetCDF + annotation XML
 fetch algorithm: source Item ID -> authenticate + search + download to job-local storage
   -> DPS staged-source workflow (local paths only)
        -> validate source metadata and staged files
-       -> read Beta0 header and GCPs
+       -> read and validate radiometry and geometry LUT coordinates
        -> find source-bbox candidates
        -> for each source-item × MGRS-tile pair
-            -> densify tile boundary; map it to a padded Beta0 pixel window
+            -> select a padded Beta0 pixel window from geometry-LUT coverage
             -> range-read the four-band Beta0 window
-            -> sample only the required physical-coordinate LUT slice
+            -> sample GammaNought and longitude/latitude onto that window in physical coordinates
             -> calculate windowed Gamma0
-            -> directly warp Beta0, Gamma0, and GammaNought to the tile grid
+            -> directly warp Beta0, Gamma0, and GammaNought from longitude/latitude to the tile grid
             -> validate nine single-band COGs and create an RGB thumbnail
             -> write and validate the STAC Item, then atomically promote it
        -> rebuild local STAC Catalog with direct Item links from valid Item directories
@@ -71,19 +71,19 @@ For local development, `process-gamma0 local <item-id>` reuses the authenticated
 
 1. Use `mgrs` to enumerate standard 100 km MGRS tiles only in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox; do not probe neighboring zones.
 2. Derive each retained tile's UTM zone, hemisphere, EPSG code, and exact 100 km bounds through `MGRSToUTM`.
-3. Open the staged Beta0 TIFF and obtain its GCPs and GCP CRS.
-4. For each candidate, densify the tile perimeter in the tile UTM CRS, transform it to the GCP CRS, then use GDAL's GCP transformer to back-project it to Beta0 pixel coordinates.
-5. Pad the resulting radar window, clip it to the source raster, and skip the tile when the result is empty, non-finite, or outside the source coverage.
+3. Read the geometry LUT's WGS84 `geometry/longitude` and `geometry/latitude` arrays and verify that both use the same `(azimuth, range)` dimensions as `gammaNought`.
+4. For each candidate, transform geometry-LUT nodes to the tile UTM CRS, select nodes inside the exact tile bounds, then map their physical LUT coordinates back to source Beta0 pixels.
+5. Pad the resulting radar window, clip it to the source raster, and skip the tile when no valid geometry-LUT node overlaps.
 
-The source bbox reduces work. The GCP-derived overlap check remains authoritative.
+The source bbox reduces work. The geometry-LUT overlap check remains authoritative.
 
 ### 3. Read and calibrate a source window
 
 1. Read the accepted four-polarization Beta0 window from the staged TIFF.
-2. Shift GCP row and column coordinates into that window's local frame without mutating the original GCPs.
-3. Parse the staged annotation XML for the azimuth interval, range-pixel spacing, and ground-to-slant polynomial.
-4. Open the staged NetCDF LUT, validate its `(azimuth, range)` coordinate axes, then convert full-source line and sample coordinates for the padded window to physical azimuth and slant-range time.
-5. Read a one-cell-bracketed `radiometry/gammaNought` slice and bilinearly sample it onto the Beta0 window. Do not transpose, flip, scale full LUT extents, or interpolate the full LUT for a tile window.
+2. Parse the staged annotation XML for the azimuth interval, range-pixel spacing, and ground-to-slant polynomial.
+3. Open the staged NetCDF LUT, validate its `(azimuth, range)` coordinate axes, then convert full-source line and sample coordinates for the padded window to physical azimuth and slant-range time.
+4. Read a one-cell-bracketed `radiometry/gammaNought` slice and bilinearly sample it onto the Beta0 window. Do not transpose, flip, scale full LUT extents, or interpolate the full LUT for a tile window.
+5. Bilinearly sample `geometry/longitude` and `geometry/latitude` onto the same Beta0 window. These geometry arrays, never `gammaNought`, define georeferencing.
 6. Convert Beta0 nodata to `NaN` and calculate Gamma0 for each polarization.
 
 ```python
@@ -92,7 +92,7 @@ window_gamma0 = window_beta0.astype("float32") ** 2 * window_gamma_nought
 
 ### 4. Warp to the fixed MGRS grid
 
-Warp each of the four local Beta0 polarizations, four calibrated Gamma0 polarizations, and the resampled GammaNought window directly from shifted GCP geometry to the fixed MGRS grid:
+Warp each of the four local Beta0 polarizations, four calibrated Gamma0 polarizations, and the resampled GammaNought window directly from the local longitude/latitude geometry arrays to the fixed MGRS grid:
 
 - destination CRS: the tile UTM EPSG code;
 - destination bounds: exact `mgrs`-derived tile bounds;
@@ -102,7 +102,7 @@ Warp each of the four local Beta0 polarizations, four calibrated Gamma0 polariza
 - source nodata: `NaN`;
 - destination nodata: `NaN` during computation and `-9999.0` when written.
 
-Each scientific output has one radar-window-to-tile-grid interpolation. The workflow must not write an intermediate GCP COG and warp it later. It must not use cubic or average resampling unless a later scientific validation decision changes this specification.
+Each scientific output has one radar-window-to-tile-grid interpolation. The workflow must not write an intermediate georeferenced COG and warp it later. It must not use cubic or average resampling unless a later scientific validation decision changes this specification.
 
 A partial source footprint leaves nodata in uncovered portions of the complete fixed tile extent.
 
@@ -169,7 +169,7 @@ geometry: intersection of source coverage and tile footprint
 bbox: bbox of geometry
 ```
 
-When a reliable source-coverage polygon cannot be built from the GCP transformer, use full-tile geometry and set `maap:partial_coverage=true`. This fallback affects Item geometry only; the raster grid remains the full tile.
+When a reliable source-coverage polygon cannot be built from the sampled geometry-LUT window boundary, use full-tile geometry and set `maap:partial_coverage=true`. This fallback affects Item geometry only; the raster grid remains the full tile.
 
 Required Item properties include:
 
@@ -295,8 +295,8 @@ extra to match the bundled PgSTAC image.
 
 ## Failure Handling and Idempotency
 
-- Fail the source run for missing or invalid staged inputs, source metadata, GCPs, LUT coordinates, annotation values, or acquisition time.
-- Skip a candidate when GCP back-projection finds no overlap or a scientific warp is all nodata.
+- Fail the source run for missing or invalid staged inputs, source metadata, geometry-LUT arrays or coordinates, annotation values, or acquisition time.
+- Skip a candidate when geometry-LUT selection finds no overlap or a scientific warp is all nodata.
 - For an unexpected per-tile processing error, log the failure, retain its identifiable temporary directory for cleanup, continue with remaining candidates, and return a failed run status.
 - Stage a leaf product in a sibling temporary directory. Promote it only after nine COGs, the thumbnail, and `item.json` validate.
 - Build a complete replacement before replacing an existing valid predecessor.
@@ -309,7 +309,7 @@ extra to match the bundled PgSTAC image.
 
 - Staged-input validation covers source identity, time, bbox normalization, required assets, four readable local files, provenance sanitization, antimeridian/polar rejection, and no-network behavior.
 - MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries using only the source bbox.
-- Synthetic GCP tests cover boundary densification, acceptance, rejection, padding, clipping, non-finite mappings, and local-GCP shifting.
+- Synthetic geometry-LUT tests cover physical-coordinate window selection, padding, clipping, rejection, array alignment, and local-window longitude/latitude interpolation.
 - Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
 - Raster tests use real temporary files to validate direct warps, nine single-band COGs, the HH/HV/VV 2nd-to-98th-percentile RGB thumbnail, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
 - STAC tests validate Item geometry fallback, all ten assets, source links, time, projection/raster/SAR metadata, Catalog rebuild, empty results, replacement safety, and recovery after stale registration.
@@ -324,7 +324,7 @@ Inspect one swath-edge tile and one swath-interior tile against independent map 
 ## Migration Path
 
 1. Keep `main.py` as the authenticated local staging adapter and native-grid diagnostic while characterizing its calibration results.
-2. Establish `src/esa_biomass_gamma0/` with deterministic tests, then extract staged-input validation, grid/GCP, calibration, raster, STAC, and workflow helpers.
+2. Establish `src/esa_biomass_gamma0/` with deterministic tests, then extract staged-input validation, MGRS grids, calibration, geometry-LUT, raster, STAC, and workflow helpers.
 3. Route `main.py` and the proof-of-concept notebook through shared physical-coordinate calibration helpers without changing their diagnostic responsibilities.
 4. Implement the sequential staged-source workflow, nine COG assets, thumbnail, atomic product promotion, and Catalog recovery.
 5. Add two thin uv-based MAAP application packages: a staged-files adapter whose CWL permits MAAP File staging while its workflow remains credential-free and local-path-only, and an authenticated Item-ID fetch adapter that materializes job-local files before calling the staged workflow.
@@ -341,14 +341,14 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | Item granularity | One Item per source granule × tile | It preserves acquisition provenance while grouping same-grid assets. |
 | Scientific assets | Four Beta0, four Gamma0, and one GammaNought COG | Downstream users can inspect source amplitudes and the calibration factor beside Gamma0 without multiband rasters. |
 | Display asset | One RGB thumbnail outside the scientific raster contract | It supports browsing without changing the COG data model. |
-| Geocoding | Direct local-window warp per scientific output | This avoids intermediate GCP COGs and gives each output one controlled interpolation. |
+| Geocoding | Direct geometry-LUT local-window warp per scientific output | `geometry/longitude` and `geometry/latitude` avoid sparse embedded-GCP registration while preserving one controlled interpolation per output. |
 | Resampling | Bilinear | The workflow controls a single documented interpolation step. |
-| MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while GCP overlap determines coverage without an AOI input. |
+| MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while geometry-LUT overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environments from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution across both MAAP packages. |
 | DPS input modes | Separate hand-maintained staged-files and Item-ID fetch CWLs | Distinct schemas isolate fetch authentication; staged permits MAAP File staging while its scientific workflow remains credential-free and local-path-only. |
 | Catalog maintenance | Rebuild from validated leaf products | The workflow recovers complete outputs after a failed Catalog update. |
-| Empty source result | Valid empty Catalog | A source can have no GCP-overlapping candidates while the DPS output contract still requires root STAC files. |
+| Empty source result | Valid empty Catalog | A source can have no geometry-LUT-overlapping candidates while the DPS output contract still requires root STAC files. |
 | OGC deployment | GitHub Release validates, builds, and updates the two hand-maintained CWLs | CWL stays reviewable in source control without a generator committing derived files. |
 
 ## Open Questions
@@ -360,6 +360,6 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 
 - `AGENTS.md` — project workflow requirements and staged-input guardrails
 - `dev-docs/plans/2026-07-31-001-feat-source-package-dps-plan.md` — package and DPS implementation plan
-- `main.py` — native-GCP diagnostic and local staging reference
+- `main.py` — native-radar diagnostic and local staging reference
 - `poc.ipynb` — tiled proof of concept
 - `README.md` — package usage and validation status

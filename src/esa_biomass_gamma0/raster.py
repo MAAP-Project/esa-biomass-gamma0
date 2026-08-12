@@ -1,10 +1,9 @@
-"""Direct GCP warps and validated raster assets for one MGRS tile."""
+"""Direct geometry-LUT warps and validated raster assets for one MGRS tile."""
 
 from pathlib import Path
 
 import numpy as np
 from rasterio import open as open_raster
-from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
 from rasterio.enums import ColorInterp, Resampling
 from rasterio.warp import reproject
@@ -26,24 +25,18 @@ def warp_scientific_arrays(
     beta0: np.ndarray,
     gamma0: np.ndarray,
     gamma_nought: np.ndarray,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS | None,
+    geolocation: tuple[np.ndarray, np.ndarray],
     grid: TileGrid,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
-    """Warp local Beta0, Gamma0, and GammaNought arrays directly onto one tile grid."""
+    """Warp local scientific arrays from geometry-LUT coordinates onto one tile."""
     beta0, gamma0, gamma_nought = _validated_scientific_arrays(
         beta0, gamma0, gamma_nought
     )
+    longitude, latitude = _validated_geolocation(geolocation, beta0.shape[-2:])
 
-    if not gcps:
-        raise ValueError("Beta0 is missing GCPs")
-
-    if gcp_crs is None:
-        raise ValueError("Beta0 is missing a GCP CRS")
-
-    warped_beta0 = _warp_stack(beta0, gcps, gcp_crs, grid)
-    warped_gamma0 = _warp_stack(gamma0, gcps, gcp_crs, grid)
-    warped_gamma_nought = _warp_array(gamma_nought, gcps, gcp_crs, grid)
+    warped_beta0 = _warp_stack(beta0, longitude, latitude, grid)
+    warped_gamma0 = _warp_stack(gamma0, longitude, latitude, grid)
+    warped_gamma_nought = _warp_array(gamma_nought, longitude, latitude, grid)
 
     if not any(np.isfinite(array).any() for array in (warped_beta0, warped_gamma0)):
         return None
@@ -257,30 +250,40 @@ def _validated_scientific_arrays(
     return beta0, gamma0, gamma_nought
 
 
+def _validated_geolocation(
+    geolocation: tuple[np.ndarray, np.ndarray], shape: tuple[int, int]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return matching longitude and latitude arrays with usable source coverage."""
+    if len(geolocation) != 2:
+        raise ValueError("geolocation requires longitude and latitude arrays")
+    longitude, latitude = (
+        np.asarray(values, dtype="float64") for values in geolocation
+    )
+    if longitude.shape != shape or latitude.shape != shape:
+        raise ValueError("geolocation must match the scientific source window shape")
+    if not (np.isfinite(longitude) & np.isfinite(latitude)).any():
+        raise ValueError("geolocation has no finite source coverage")
+    return longitude, latitude
+
+
 def _warp_stack(
-    data: np.ndarray,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS,
-    grid: TileGrid,
+    data: np.ndarray, longitude: np.ndarray, latitude: np.ndarray, grid: TileGrid
 ) -> np.ndarray:
     """Directly warp every polarization in one radar-space stack."""
-    return np.stack([_warp_array(band, gcps, gcp_crs, grid) for band in data])
+    return np.stack([_warp_array(band, longitude, latitude, grid) for band in data])
 
 
 def _warp_array(
-    data: np.ndarray,
-    gcps: list[GroundControlPoint],
-    gcp_crs: CRS,
-    grid: TileGrid,
+    data: np.ndarray, longitude: np.ndarray, latitude: np.ndarray, grid: TileGrid
 ) -> np.ndarray:
-    """Directly bilinearly warp one local radar-space array to one tile grid."""
+    """Directly bilinearly warp one geometry-LUT source array to one tile grid."""
     destination = np.full(grid.shape, np.nan, dtype="float32")
 
     reproject(
         source=data,
         destination=destination,
-        gcps=gcps,
-        src_crs=gcp_crs,
+        src_geoloc_array=(longitude, latitude),
+        src_crs=CRS.from_epsg(4326),
         dst_crs=grid.crs,
         dst_transform=grid.transform,
         src_nodata=np.nan,

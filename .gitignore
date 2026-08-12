@@ -13,3 +13,4 @@ diagnostics/
 output/
 issue-drafts/
 dev-docs/plans/
+.worktrees/

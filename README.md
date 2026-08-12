@@ -13,11 +13,13 @@ standard 100 km MGRS tile in a UTM zone intersecting the source bbox. For each
 tile, it:
 
 1. Reads the staged source STAC Item, Beta0 TIFF, radiometry LUT, and annotation XML.
-2. Samples the GammaNought LUT in radar geometry and calculates linear Gamma0
-   as `Beta0² × GammaNought`.
-3. Warps four Beta0 polarizations, four Gamma0 polarizations, and GammaNought
+2. Uses the radiometry LUT's `geometry/longitude` and `geometry/latitude` to
+   select and georeference each Beta0 window in radar geometry.
+3. Samples GammaNought in the same physical coordinates and calculates linear
+   Gamma0 as `Beta0² × GammaNought`.
+4. Warps four Beta0 polarizations, four Gamma0 polarizations, and GammaNought
    directly onto an exact 4,000 x 4,000 pixel, 25 m UTM tile grid.
-4. Writes nine Cloud Optimized GeoTIFFs, a display-only RGB thumbnail, and STAC
+5. Writes nine Cloud Optimized GeoTIFFs, a display-only RGB thumbnail, and STAC
    metadata.
 
 Two registered MAAP algorithms expose the same scientific product:

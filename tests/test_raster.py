@@ -6,7 +6,7 @@ import warnings
 from affine import Affine
 import numpy as np
 import pytest
-from rasterio.control import GroundControlPoint
+from pyproj import Transformer
 from rasterio.crs import CRS
 
 from esa_biomass_gamma0 import __version__ as PACKAGE_VERSION
@@ -34,15 +34,13 @@ def _grid() -> TileGrid:
     )
 
 
-def _gcps(grid: TileGrid) -> list[GroundControlPoint]:
+def _geolocation(grid: TileGrid) -> tuple[np.ndarray, np.ndarray]:
     """Map a ten-pixel source directly onto the synthetic target grid."""
-    xmin, ymin, xmax, ymax = grid.bounds
-    return [
-        GroundControlPoint(row=0, col=0, x=xmin, y=ymax),
-        GroundControlPoint(row=0, col=9, x=xmax, y=ymax),
-        GroundControlPoint(row=9, col=0, x=xmin, y=ymin),
-        GroundControlPoint(row=9, col=9, x=xmax, y=ymin),
-    ]
+    x, y = np.meshgrid(
+        np.linspace(grid.bounds[0], grid.bounds[2], 10),
+        np.linspace(grid.bounds[3], grid.bounds[1], 10),
+    )
+    return Transformer.from_crs(grid.crs, "EPSG:4326", always_xy=True).transform(x, y)
 
 
 def _arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -57,12 +55,12 @@ def _arrays() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def test_warps_beta0_gamma0_and_lut_directly_to_the_target_grid() -> None:
-    """Each scientific source array gets one direct GCP-to-UTM bilinear warp."""
+    """Each scientific source array gets one direct geometry-LUT-to-UTM warp."""
     grid = _grid()
     beta0, gamma0, gamma_nought = _arrays()
 
     warped = warp_scientific_arrays(
-        beta0, gamma0, gamma_nought, _gcps(grid), grid.crs, grid
+        beta0, gamma0, gamma_nought, _geolocation(grid), grid
     )
 
     assert warped is not None
@@ -77,13 +75,12 @@ def test_warps_beta0_gamma0_and_lut_directly_to_the_target_grid() -> None:
 
 
 @pytest.mark.parametrize(
-    ("beta0", "gamma0", "gamma_nought", "gcps", "gcp_crs", "message"),
+    ("beta0", "gamma0", "gamma_nought", "geolocation", "message"),
     [
         (
             np.ones((3, 10, 10), dtype="float32"),
             np.ones((3, 10, 10), dtype="float32"),
             np.ones((10, 10), dtype="float32"),
-            "valid",
             "valid",
             "four polarizations",
         ),
@@ -92,7 +89,6 @@ def test_warps_beta0_gamma0_and_lut_directly_to_the_target_grid() -> None:
             np.ones((4, 9, 10), dtype="float32"),
             np.ones((10, 10), dtype="float32"),
             "valid",
-            "valid",
             "same shape",
         ),
         (
@@ -100,16 +96,14 @@ def test_warps_beta0_gamma0_and_lut_directly_to_the_target_grid() -> None:
             np.ones((4, 10, 10), dtype="float32"),
             np.ones((9, 10), dtype="float32"),
             "valid",
-            "valid",
             "window shape",
         ),
         (
             np.ones((4, 10, 10), dtype="float32"),
             np.ones((4, 10, 10), dtype="float32"),
             np.ones((10, 10), dtype="float32"),
-            "valid",
-            None,
-            "GCP CRS",
+            "empty",
+            "finite source coverage",
         ),
     ],
 )
@@ -117,11 +111,10 @@ def test_rejects_invalid_scientific_warp_inputs(
     beta0: np.ndarray,
     gamma0: np.ndarray,
     gamma_nought: np.ndarray,
-    gcps: str,
-    gcp_crs: str | None,
+    geolocation: str,
     message: str,
 ) -> None:
-    """Warp inputs must have complete local georeferencing and matching arrays."""
+    """Warp inputs must have complete geometry-LUT coverage and matching arrays."""
     grid = _grid()
 
     with pytest.raises(ValueError, match=message):
@@ -129,8 +122,9 @@ def test_rejects_invalid_scientific_warp_inputs(
             beta0,
             gamma0,
             gamma_nought,
-            _gcps(grid) if gcps == "valid" else [],
-            grid.crs if gcp_crs == "valid" else None,
+            _geolocation(grid)
+            if geolocation == "valid"
+            else (np.full(grid.shape, np.nan), np.full(grid.shape, np.nan)),
             grid,
         )
 
@@ -145,8 +139,7 @@ def test_returns_none_when_every_direct_warp_is_nodata() -> None:
             empty,
             empty,
             np.ones(grid.shape, dtype="float32"),
-            _gcps(grid),
-            grid.crs,
+            _geolocation(grid),
             grid,
         )
         is None
