@@ -89,6 +89,18 @@ def geometry_window(
         & (y <= grid.bounds[3])
     )
     geometry_rows, geometry_columns = np.nonzero(within_grid)
+    canonical_owner = np.fromiter(
+        (
+            _is_canonical_owner(
+                grid.tile_id, latitude[row, column], longitude[row, column]
+            )
+            for row, column in zip(geometry_rows, geometry_columns, strict=True)
+        ),
+        dtype=bool,
+        count=len(geometry_rows),
+    )
+    geometry_rows = geometry_rows[canonical_owner]
+    geometry_columns = geometry_columns[canonical_owner]
     if not geometry_rows.size:
         return None
 
@@ -147,6 +159,17 @@ def geometry_coordinates(
     if not (np.isfinite(geolocation[0]) & np.isfinite(geolocation[1])).any():
         raise ValueError("geometry LUT has no finite geolocation in the source window")
     return geolocation
+
+
+def _is_canonical_owner(tile_id: str, latitude: float, longitude: float) -> bool:
+    """Return whether one valid WGS84 geometry node belongs to an MGRS tile."""
+    try:
+        return (
+            MGRS_CONVERTER.toMGRS(float(latitude), float(longitude), MGRSPrecision=0)
+            == tile_id
+        )
+    except MGRSError:
+        return False
 
 
 def _validate_geometry(

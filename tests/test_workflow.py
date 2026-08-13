@@ -11,7 +11,7 @@ from pyproj import Transformer
 from rasterio.crs import CRS
 
 from conftest import write_item as write_source_item
-from esa_biomass_gamma0.grids import TileGrid
+from esa_biomass_gamma0.grids import TileGrid, target_grid
 from esa_biomass_gamma0.stac import is_complete_product
 from esa_biomass_gamma0.workflow import process_source
 
@@ -24,6 +24,25 @@ def _grid() -> TileGrid:
         epsg=32632,
         bounds=bounds,
         crs=CRS.from_epsg(32632),
+        transform=Affine.translation(bounds[0], bounds[3]) * Affine.scale(25, -25),
+        shape=(10, 10),
+    )
+
+
+def _boundary_grid(tile_id: str) -> TileGrid:
+    """Build a small source-geometry patch in one corner of a real MGRS tile."""
+    grid = target_grid(tile_id)
+    bounds = (
+        grid.bounds[0],
+        grid.bounds[1],
+        grid.bounds[0] + 250,
+        grid.bounds[1] + 250,
+    )
+    return TileGrid(
+        tile_id=grid.tile_id,
+        epsg=grid.epsg,
+        bounds=bounds,
+        crs=grid.crs,
         transform=Affine.translation(bounds[0], bounds[3]) * Affine.scale(25, -25),
         shape=(10, 10),
     )
@@ -84,12 +103,16 @@ def _write_annotation(path: Path) -> None:
 
 
 def _staged_source(
-    staged_paths: dict[str, Path], grid: TileGrid, **beta0: object
+    staged_paths: dict[str, Path],
+    grid: TileGrid,
+    *,
+    geometry_grid: TileGrid | None = None,
+    **beta0: object,
 ) -> None:
     """Replace generic staged fixtures with real workflow inputs."""
     write_source_item(staged_paths["source_item"])
     _write_beta0(staged_paths["beta0_tiff"], **beta0)
-    _write_lut(staged_paths["radiometry_lut"], grid)
+    _write_lut(staged_paths["radiometry_lut"], geometry_grid or grid)
     _write_annotation(staged_paths["annotation_xml"])
 
 
@@ -118,6 +141,29 @@ def test_processes_and_recovers_one_complete_tile_product(
     assert repeated.written == 1
     assert repeated.failed == 0
     assert is_complete_product(directory)
+
+
+def test_skips_overhanging_grid_before_writing_products(
+    tmp_path: Path, staged_paths: dict[str, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Canonical MGRS rejection leaves no product or Catalog link behind."""
+    from esa_biomass_gamma0 import workflow
+
+    overhanging_grid = target_grid("32TKR")
+    _staged_source(
+        staged_paths,
+        overhanging_grid,
+        geometry_grid=_boundary_grid("31TGL"),
+    )
+    monkeypatch.setattr(workflow, "candidate_grids", lambda _: [overhanging_grid])
+
+    result = process_source(**staged_paths, output_root=tmp_path / "output")
+
+    assert result.candidates == 1
+    assert result.written == 0
+    assert result.skipped_no_data == 1
+    assert result.failed == 0
+    assert not list((tmp_path / "output").rglob("item.json"))
 
 
 def test_skips_all_nodata_tiles_without_requiring_embedded_gcps(

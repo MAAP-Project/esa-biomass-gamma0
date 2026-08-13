@@ -25,7 +25,16 @@ logger = logging.getLogger(__name__)
 def materialize_source(
     item_id: str, destination: Path, client_secret: str, offline_token: str
 ) -> dict[str, Path]:
-    """Materialize an Item and required assets into an initially empty directory."""
+    """Materialize an Item and required assets outside an active event loop."""
+    return asyncio.run(
+        materialize_source_async(item_id, destination, client_secret, offline_token)
+    )
+
+
+async def materialize_source_async(
+    item_id: str, destination: Path, client_secret: str, offline_token: str
+) -> dict[str, Path]:
+    """Materialize an Item and required assets from an active event loop."""
     destination.mkdir(parents=True, exist_ok=True)
     if any(destination.iterdir()):
         raise ValueError("source materialization destination must be empty")
@@ -33,8 +42,8 @@ def materialize_source(
     try:
         item = find_source_item(item_id)
         asset_urls = _required_asset_urls(item)
-        contents = asyncio.run(
-            fetch_assets(asset_urls, request_access_token(client_secret, offline_token))
+        contents = await fetch_assets(
+            asset_urls, request_access_token(client_secret, offline_token)
         )
         paths = {
             "source_item": destination / "source-item.json",

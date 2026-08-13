@@ -8,9 +8,10 @@ BIOMASS Level-1B granule, using staged files or a MAAP Item-ID fetch job.
 ## About
 
 This MAAP DPS algorithm converts the four-polarization Beta0 amplitudes in one
-ESA BIOMASS L1B product into analysis-ready products on every overlapping
-standard 100 km MGRS tile in a UTM zone intersecting the source bbox. For each
-tile, it:
+ESA BIOMASS L1B product into analysis-ready products on standard 100 km MGRS
+tiles in UTM zones intersecting the source bbox. At a UTM boundary, it retains
+at most one edge tile column per zone and rejects redundant neighboring-zone
+overhang columns. For each tile, it:
 
 1. Reads the staged source STAC Item, Beta0 TIFF, radiometry LUT, and annotation XML.
 2. Uses the radiometry LUT's `geometry/longitude` and `geometry/latitude` to
@@ -142,6 +143,14 @@ uv run --frozen --no-dev process-gamma0 staged \
 ```
 
 Each run replaces complete existing tile products.
+
+### Boundary-grid visualization
+
+[`docs/mgrs-gridding.ipynb`](docs/mgrs-gridding.ipynb) maps a locally staged,
+cross-zone source's Beta0 imagery, source bbox, and exact MGRS candidates. It
+uses the production geometry-LUT selection gate to show retained edge tiles and
+the rejected redundant overhang candidate. It needs the four staged local files
+and makes no network requests or credential lookups.
 
 ### Local Item-ID runs
 
