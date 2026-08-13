@@ -583,6 +583,7 @@ fetch = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "boto3" },
     { name = "jupyterlab" },
     { name = "matplotlib" },
     { name = "obstore" },
@@ -619,6 +620,7 @@ provides-extras = ["fetch"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "boto3", specifier = ">=1.43.63" },
     { name = "jupyterlab", specifier = ">=4.6.2" },
     { name = "matplotlib", specifier = ">=3.11.1" },
     { name = "obstore", specifier = ">=0.11.0" },
