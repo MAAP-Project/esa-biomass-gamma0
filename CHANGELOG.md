@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.3...v0.2.4) (2026-08-13)
+
+
+### Bug Fixes
+
+* eliminate some marginal overhanging MGRS grids from output ([#29](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/29)) ([9580439](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/95804393369f9116f79aecff842e239b7bc6e196))
+* update release please TOML lock selector ([#31](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/31)) ([97e99ae](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/97e99ae01ec1d17ade23c6cbc997b5eb7356e449))
+
 ## [0.2.3](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.2...v0.2.3) (2026-08-12)
 
 
