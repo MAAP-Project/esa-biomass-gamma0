@@ -98,6 +98,83 @@ def test_selects_a_padded_geometry_lut_window_and_samples_it() -> None:
     np.testing.assert_allclose(sampled_latitude, latitude[10:40, 20:60])
 
 
+def test_rejects_projected_overlap_without_canonical_mgrs_ownership() -> None:
+    """A zone-overhanging grid cannot claim geometry canonically owned next door."""
+    metadata = CalibrationMetadata(1, 1, (0, 1))
+    coordinates = LutCoordinates(
+        azimuth=np.arange(10, dtype="float64"),
+        slant_range=np.arange(10, dtype="float64"),
+        shape=(10, 10),
+        dimensions=("azimuth", "range"),
+    )
+    longitude, latitude = np.meshgrid(
+        np.linspace(5.98, 5.99, 10), np.linspace(45.45, 45.55, 10)
+    )
+
+    assert (
+        geometry_window(
+            longitude,
+            latitude,
+            target_grid("32TKR"),
+            metadata,
+            coordinates,
+            10,
+            10,
+        )
+        is None
+    )
+    assert geometry_window(
+        longitude,
+        latitude,
+        target_grid("31TGL"),
+        metadata,
+        coordinates,
+        10,
+        10,
+    ) == Window(0, 0, 10, 10)
+
+    boundary_longitude, boundary_latitude = np.meshgrid(
+        np.linspace(5.98, 6.02, 10), np.linspace(45.45, 45.55, 10)
+    )
+    assert (
+        geometry_window(
+            boundary_longitude,
+            boundary_latitude,
+            target_grid("31TGL"),
+            metadata,
+            coordinates,
+            10,
+            10,
+        )
+        is not None
+    )
+    assert (
+        geometry_window(
+            boundary_longitude,
+            boundary_latitude,
+            target_grid("32TKR"),
+            metadata,
+            coordinates,
+            10,
+            10,
+        )
+        is not None
+    )
+
+    assert (
+        geometry_window(
+            np.full((10, 10), -354.0),
+            np.full((10, 10), 45.5),
+            target_grid("32TKR"),
+            metadata,
+            coordinates,
+            10,
+            10,
+        )
+        is None
+    )
+
+
 def test_rejects_nonmatching_or_nonoverlapping_geometry() -> None:
     """Invalid geometry fails and an outside tile is skipped without a GCP fallback."""
     grid = target_grid("32TPR")

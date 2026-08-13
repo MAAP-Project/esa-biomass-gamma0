@@ -30,6 +30,7 @@ This workflow produces fixed-grid, 25 m MGRS tile products from one staged sourc
 - The output grid has shape `[4000, 4000]`.
 - The radiometry NetCDF provides `geometry/longitude` and `geometry/latitude` LUTs aligned to the validated `(azimuth, range)` axes. They map Beta0 source pixels to WGS84 position after physical-coordinate interpolation.
 - The source STAC bbox filters candidates only. Geometry-LUT overlap determines whether a tile has coverage.
+- A granule may span adjacent UTM zones, but boundary selection must retain no more than one edge MGRS tile column per zone. Do not create extra neighboring-zone columns solely because a full UTM tile grid overhangs that zone boundary. This matches the HLS-observed boundary-tile policy and limits redundant products while retaining boundary coverage.
 - Gamma0 is linear intensity: `Beta0_amplitude² × gammaNought`. It is not dB.
 - Processing arrays use `NaN` for missing values. Written COGs use `-9999.0` as `float32` nodata.
 - A source granule may yield no accepted tiles. That run still writes a valid empty Catalog.
@@ -69,7 +70,7 @@ For local development, `process-gamma0 local <item-id>` reuses the authenticated
 
 ### 2. Select MGRS output tiles
 
-1. Use `mgrs` to enumerate standard 100 km MGRS tiles only in UTM zones intersecting the source bbox. Filter their WGS84 envelopes against the source bbox; do not probe neighboring zones.
+1. Use `mgrs` to enumerate standard 100 km MGRS tiles only in UTM zones intersecting the source bbox. At a UTM boundary, retain at most the one edge tile column from each intersecting zone; reject additional neighboring-zone columns that arise only from full-grid overhang. Filter the retained tiles' WGS84 envelopes against the source bbox; do not probe neighboring zones.
 2. Derive each retained tile's UTM zone, hemisphere, EPSG code, and exact 100 km bounds through `MGRSToUTM`.
 3. Read the geometry LUT's WGS84 `geometry/longitude` and `geometry/latitude` arrays and verify that both use the same `(azimuth, range)` dimensions as `gammaNought`.
 4. For each candidate, transform geometry-LUT nodes to the tile UTM CRS, select nodes inside the exact tile bounds, then map their physical LUT coordinates back to source Beta0 pixels.
@@ -308,7 +309,7 @@ extra to match the bundled PgSTAC image.
 ### Deterministic tests
 
 - Staged-input validation covers source identity, time, bbox normalization, required assets, four readable local files, provenance sanitization, antimeridian/polar rejection, and no-network behavior.
-- MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries using only the source bbox.
+- MGRS grids have exact bounds, CRS, transform, and `4000 × 4000` shape in both hemispheres. Candidate enumeration covers UTM-zone and latitude-band boundaries using only the source bbox, retaining no more than one boundary column per intersecting zone and rejecting redundant overhang columns.
 - Synthetic geometry-LUT tests cover physical-coordinate window selection, padding, clipping, rejection, array alignment, and local-window longitude/latitude interpolation.
 - Calibration tests verify physical-coordinate LUT interpolation, axis order, bracketed reads, boundary behavior, and `NaN`-preserving Gamma0 math.
 - Raster tests use real temporary files to validate direct warps, nine single-band COGs, the HH/HV/VV 2nd-to-98th-percentile RGB thumbnail, COG layout, CRS, transform, compression, nodata, and quantity/polarization tags.
@@ -343,7 +344,7 @@ Existing native GCP COGs remain diagnostics. They must not join the UTM tile col
 | Display asset | One RGB thumbnail outside the scientific raster contract | It supports browsing without changing the COG data model. |
 | Geocoding | Direct geometry-LUT local-window warp per scientific output | `geometry/longitude` and `geometry/latitude` avoid sparse embedded-GCP registration while preserving one controlled interpolation per output. |
 | Resampling | Bilinear | The workflow controls a single documented interpolation step. |
-| MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones | `mgrs` owns IDs, zones, hemispheres, and bounds; restricting zones prevents duplicate geographic coverage, while geometry-LUT overlap determines coverage without an AOI input. |
+| MGRS geometry | `mgrs` round-trip in only bbox-intersecting UTM zones, with one boundary column per zone | `mgrs` owns IDs, zones, hemispheres, and bounds; limiting boundary columns follows HLS-observed selection and prevents redundant overhang products, while geometry-LUT overlap determines coverage without an AOI input. |
 | Package boundary | `src/esa_biomass_gamma0/` with one workflow API and CLI | Outer adapters stay thin and do not duplicate processing logic. |
 | Runtime | Frozen uv environments from `pyproject.toml` and `uv.lock` | One manifest and lock avoid divergent dependency resolution across both MAAP packages. |
 | DPS input modes | Separate hand-maintained staged-files and Item-ID fetch CWLs | Distinct schemas isolate fetch authentication; staged permits MAAP File staging while its scientific workflow remains credential-free and local-path-only. |

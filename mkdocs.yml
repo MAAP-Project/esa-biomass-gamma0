@@ -12,4 +12,5 @@ extra_css:
 nav:
   - Overview: index.md
   - Level 1b georeferencing notebook: georeferencing.ipynb
+  - MGRS boundary gridding notebook: mgrs-gridding.ipynb
   - Gamma0 Correction Algorithm proof of concept notebook: poc.ipynb

@@ -1,5 +1,6 @@
 """Tests for authenticated source materialization."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -66,6 +67,31 @@ def test_materialize_source_writes_sanitized_local_files(
     serialized = json.dumps(document)
     assert "password" not in serialized
     assert "token=secret" not in serialized
+
+
+def test_materialize_source_async_runs_inside_an_event_loop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The async API can materialize a source from an active event loop."""
+    monkeypatch.setattr(materialization, "find_source_item", lambda _: _item())
+    monkeypatch.setattr(
+        materialization, "request_access_token", lambda *_: "access-token"
+    )
+
+    async def download(urls: dict[str, str], token: str) -> dict[str, bytes]:
+        assert token == "access-token"
+        return {name: name.encode() for name in urls}
+
+    monkeypatch.setattr(materialization, "fetch_assets", download)
+
+    async def materialize() -> dict[str, Path]:
+        return await materialization.materialize_source_async(
+            "source/item", tmp_path / "staged", "client-secret", "offline-token"
+        )
+
+    paths = asyncio.run(materialize())
+
+    assert paths["beta"].read_bytes() == b"beta"
 
 
 def test_materialize_source_removes_partial_files_after_download_failure(
