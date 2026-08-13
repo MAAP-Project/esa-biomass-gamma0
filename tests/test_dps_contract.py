@@ -197,7 +197,7 @@ def test_release_please_owns_versioned_release_files() -> None:
     assert "GITHUB_TOKEN" not in str(release_step)
 
     assert extra_files_by_path["uv.lock"]["jsonpath"] == (
-        "$.package[?(@.name == 'esa-biomass-gamma0')].version"
+        "$.package[?(@.name.value == 'esa-biomass-gamma0')].version"
     )
     lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     assert [
