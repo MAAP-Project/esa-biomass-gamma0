@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.4...v0.2.5) (2026-08-14)
+
+
+### Bug Fixes
+
+* keep some STAC properties from the input granules ([#32](https://github.com/MAAP-Project/esa-biomass-gamma0/issues/32)) ([3edd501](https://github.com/MAAP-Project/esa-biomass-gamma0/commit/3edd50140ae55c03e658d101c969c64d35332b34))
+
 ## [0.2.4](https://github.com/MAAP-Project/esa-biomass-gamma0/compare/v0.2.3...v0.2.4) (2026-08-13)
 
 
