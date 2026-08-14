@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
-from typing import Mapping
+from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 
 from pystac import Item, STACError
@@ -15,6 +15,18 @@ REQUIRED_ASSET_KEYS = (
     "enclosure_tiff",
     "enclosure_nc",
     "enclosure_annot_xml",
+)
+SOURCE_PROPERTY_KEYS = (
+    "start_datetime",
+    "end_datetime",
+    "constellation",
+    "sat:orbit_state",
+    "sat:absolute_orbit",
+    "sar:observation_direction",
+    "sar:instrument_mode",
+    "eopf:datatake_id",
+    "eofeos:repeat_cycle_id",
+    "eofeos:major_cycle_id",
 )
 
 
@@ -28,6 +40,7 @@ class StagedSource:
     bbox: tuple[float, float, float, float]
     self_href: str | None
     asset_hrefs: Mapping[str, str]
+    properties: Mapping[str, Any]
     source_item: Path
     beta0_tiff: Path
     radiometry_lut: Path
@@ -89,6 +102,13 @@ def validate_staged_source(
         bbox=bbox,
         self_href=sanitize_href(self_href) if self_href else None,
         asset_hrefs=MappingProxyType(asset_hrefs),
+        properties=MappingProxyType(
+            {
+                key: item.properties[key]
+                for key in SOURCE_PROPERTY_KEYS
+                if key in item.properties
+            }
+        ),
         **paths,
     )
 

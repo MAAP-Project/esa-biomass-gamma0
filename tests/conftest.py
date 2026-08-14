@@ -34,7 +34,21 @@ def write_item(path: Path, **overrides: object) -> None:
                 [[10.0, 45.0], [11.0, 45.0], [11.0, 46.0], [10.0, 46.0], [10.0, 45.0]]
             ],
         },
-        "properties": {"datetime": "2026-07-31T12:00:00Z"},
+        "properties": {
+            "datetime": "2026-07-31T12:00:00Z",
+            "start_datetime": "2026-07-31T12:00:00Z",
+            "end_datetime": "2026-07-31T12:00:21Z",
+            "constellation": "Biomass",
+            "sat:orbit_state": "descending",
+            "sat:absolute_orbit": 3017,
+            "sar:observation_direction": "left",
+            "sar:instrument_mode": "SM",
+            "eopf:datatake_id": "24719280",
+            "eofeos:repeat_cycle_id": "1",
+            "eofeos:major_cycle_id": "1",
+            "processing:level": "L1B",
+            "storage:schemes": {"example": "not copied"},
+        },
         "links": [
             {
                 "rel": "self",

@@ -27,7 +27,13 @@ from pystac.extensions.mgrs import MgrsExtension
 from pystac.extensions.projection import ProjectionExtension
 from pystac.extensions.raster import RasterBand, RasterExtension
 from pystac.extensions.render import Render, RenderExtension
-from pystac.extensions.sar import FrequencyBand, Polarization, SarExtension
+from pystac.extensions.sar import (
+    FrequencyBand,
+    ObservationDirection,
+    Polarization,
+    SarExtension,
+)
+from pystac.extensions.sat import OrbitState, SatExtension
 from rasterio.crs import CRS
 from rasterio.transform import Affine, array_bounds
 
@@ -139,6 +145,7 @@ def build_item(
     partial_coverage = geometry is None
     geometry = geometry or tile_geometry(grid)
     properties: dict[str, Any] = {
+        **source.properties,
         "platform": "BIOMASS",
         "instruments": ["P-SAR"],
         "processing:software": {PACKAGE_NAME: processing_version},
@@ -171,11 +178,28 @@ def build_item(
     )
     MgrsExtension.ext(item, add_if_missing=True).apply(*_mgrs_components(grid))
     SarExtension.ext(item, add_if_missing=True).apply(
-        instrument_mode="P-SAR",
+        instrument_mode=source.properties.get("sar:instrument_mode", "P-SAR"),
         frequency_band=FrequencyBand.P,
         polarizations=[Polarization(value) for value in POLARIZATIONS],
         product_type="Gamma0",
+        observation_direction=(
+            ObservationDirection(source.properties["sar:observation_direction"])
+            if "sar:observation_direction" in source.properties
+            else None
+        ),
     )
+    if (
+        "sat:orbit_state" in source.properties
+        or "sat:absolute_orbit" in source.properties
+    ):
+        SatExtension.ext(item, add_if_missing=True).apply(
+            orbit_state=(
+                OrbitState(source.properties["sat:orbit_state"])
+                if "sat:orbit_state" in source.properties
+                else None
+            ),
+            absolute_orbit=source.properties.get("sat:absolute_orbit"),
+        )
 
     for key, definition in ITEM_ASSETS.items():
         filename = product_asset_filename(key, source.item_id, grid.tile_id)
@@ -596,7 +620,7 @@ def _write_json(path: Path, document: dict[str, Any]) -> None:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            json.dump(document, file, indent=2)
+            json.dump(document, file, indent=2, sort_keys=True)
             file.write("\n")
         os.replace(temporary, path)
     except Exception:

@@ -299,7 +299,9 @@ The job also writes `catalog.json` at the output root, with direct links to each
 Item. Asset filenames include their source Item ID and MGRS tile so they remain
 unique across the job output. Scientific COGs are single-band `float32` rasters with `-9999.0` nodata;
 Gamma0 is linear intensity, not dB. Every Item provides descriptive
-polarization-specific titles, media types, and roles for all ten assets.
+polarization-specific titles, media types, and roles for all ten assets. When
+available, Items retain source acquisition timing, constellation, orbit, SAR
+viewing, datatake, and repeat-cycle fields for downstream filtering.
 
 ### Sample STAC metadata
 

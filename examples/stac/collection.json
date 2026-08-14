@@ -109,7 +109,7 @@
       "rescale": [
         [
           0.1,
-          1
+          1.0
         ],
         [
           0.025,
@@ -120,7 +120,7 @@
           0.8
         ]
       ],
-      "nodata": -9999
+      "nodata": -9999.0
     },
     "gamma0-rgb": {
       "assets": [
@@ -143,7 +143,7 @@
           0.3
         ]
       ],
-      "nodata": -9999
+      "nodata": -9999.0
     },
     "gamma0-correction-factor": {
       "assets": [
@@ -156,7 +156,7 @@
           1
         ]
       ],
-      "nodata": -9999,
+      "nodata": -9999.0,
       "colormap_name": "thermal"
     }
   },
