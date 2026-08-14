@@ -172,7 +172,7 @@ bbox: bbox of geometry
 
 When a reliable source-coverage polygon cannot be built from the sampled geometry-LUT window boundary, use full-tile geometry and set `maap:partial_coverage=true`. This fallback affects Item geometry only; the raster grid remains the full tile.
 
-Required Item properties include:
+Required Item properties, plus listed source properties when present, include:
 
 ```json
 {
@@ -182,7 +182,16 @@ Required Item properties include:
   "datetime": "<source acquisition datetime>",
   "platform": "BIOMASS",
   "instruments": ["P-SAR"],
-  "sar:instrument_mode": "P-SAR",
+  "constellation": "<source constellation>",
+  "start_datetime": "<source acquisition start>",
+  "end_datetime": "<source acquisition end>",
+  "sat:orbit_state": "<source orbit state>",
+  "sat:absolute_orbit": "<source absolute orbit>",
+  "sar:instrument_mode": "<source instrument mode>",
+  "sar:observation_direction": "<source observation direction>",
+  "eopf:datatake_id": "<source datatake ID>",
+  "eofeos:repeat_cycle_id": "<source repeat cycle ID>",
+  "eofeos:major_cycle_id": "<source major cycle ID>",
   "sar:frequency_band": "P",
   "sar:polarizations": ["HH", "HV", "VH", "VV"],
   "sar:product_type": "Gamma0",
@@ -195,11 +204,13 @@ Required Item properties include:
 }
 ```
 
-Use PySTAC's MGRS and SAR extensions for their standard fields and the
-Processing extension for software provenance. The full tile ID is the zero-padded
-`mgrs:utm_zone` followed by `mgrs:latitude_band` and `mgrs:grid_square`; it is
-not stored as a project-specific field. The current workflow does not copy
-source orbit, pass direction, or processing-baseline properties.
+Use PySTAC's MGRS, SAR, and Satellite extensions for their standard fields and
+the Processing extension for software provenance. The full tile ID is the
+zero-padded `mgrs:utm_zone` followed by `mgrs:latitude_band` and
+`mgrs:grid_square`; it is not stored as a project-specific field. Copy the
+listed source acquisition and orbit properties only when present. Do not copy
+source processing-baseline, storage, or authentication properties because they
+describe the input L1B product rather than the derived Gamma0 product.
 
 Add a `derived_from` link to the sanitized input Item self HREF when available,
 sanitized `via` links to the Beta0 TIFF and radiometry NetCDF source URLs, and a

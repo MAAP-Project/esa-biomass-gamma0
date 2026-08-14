@@ -6,6 +6,7 @@
     "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
     "https://stac-extensions.github.io/mgrs/v1.0.0/schema.json",
     "https://stac-extensions.github.io/sar/v1.0.0/schema.json",
+    "https://stac-extensions.github.io/sat/v1.0.0/schema.json",
     "https://stac-extensions.github.io/raster/v1.1.0/schema.json"
   ],
   "id": "gamma0-BIOMASS_EXAMPLE_001-32TPR",
@@ -43,6 +44,16 @@
     46.046265455836014
   ],
   "properties": {
+    "start_datetime": "2026-07-31T12:00:00Z",
+    "end_datetime": "2026-07-31T12:00:21Z",
+    "constellation": "Biomass",
+    "sat:orbit_state": "descending",
+    "sat:absolute_orbit": 3017,
+    "sar:observation_direction": "left",
+    "sar:instrument_mode": "SM",
+    "eopf:datatake_id": "24719280",
+    "eofeos:repeat_cycle_id": "1",
+    "eofeos:major_cycle_id": "1",
     "platform": "BIOMASS",
     "instruments": [
       "P-SAR"
@@ -57,17 +68,16 @@
       4000
     ],
     "proj:transform": [
-      25,
-      0,
-      600000,
-      0,
-      -25,
-      5100000
+      25.0,
+      0.0,
+      600000.0,
+      0.0,
+      -25.0,
+      5100000.0
     ],
     "mgrs:latitude_band": "T",
     "mgrs:grid_square": "PR",
     "mgrs:utm_zone": 32,
-    "sar:instrument_mode": "P-SAR",
     "sar:frequency_band": "P",
     "sar:polarizations": [
       "HH",
@@ -126,16 +136,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -157,16 +167,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -188,16 +198,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -219,16 +229,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -250,16 +260,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -281,16 +291,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -312,16 +322,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -343,16 +353,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }
@@ -374,16 +384,16 @@
         4000
       ],
       "proj:transform": [
-        25,
-        0,
-        600000,
-        0,
-        -25,
-        5100000
+        25.0,
+        0.0,
+        600000.0,
+        0.0,
+        -25.0,
+        5100000.0
       ],
       "raster:bands": [
         {
-          "nodata": -9999,
+          "nodata": -9999.0,
           "data_type": "float32",
           "unit": "1"
         }

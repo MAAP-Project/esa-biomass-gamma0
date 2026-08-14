@@ -133,7 +133,7 @@ def test_builds_a_valid_item_for_complete_local_assets(
     mgrs = MgrsExtension.ext(item)
     assert (mgrs.utm_zone, mgrs.latitude_band, mgrs.grid_square) == (32, "T", "PR")
     sar = SarExtension.ext(item)
-    assert sar.instrument_mode == "P-SAR"
+    assert sar.instrument_mode == "SM"
     assert sar.frequency_band == FrequencyBand.P
     assert sar.polarizations == [
         Polarization.HH,
@@ -145,6 +145,16 @@ def test_builds_a_valid_item_for_complete_local_assets(
     assert item.properties["processing:software"] == {
         "esa-biomass-gamma0": PACKAGE_VERSION
     }
+    assert item.properties["start_datetime"] == "2026-07-31T12:00:00Z"
+    assert item.properties["end_datetime"] == "2026-07-31T12:00:21Z"
+    assert item.properties["constellation"] == "Biomass"
+    assert item.properties["sat:orbit_state"] == "descending"
+    assert item.properties["sat:absolute_orbit"] == 3017
+    assert item.properties["sar:observation_direction"] == "left"
+    assert item.properties["sar:instrument_mode"] == "SM"
+    assert item.properties["eopf:datatake_id"] == "24719280"
+    assert item.properties["eofeos:repeat_cycle_id"] == "1"
+    assert item.properties["eofeos:major_cycle_id"] == "1"
     assert "processing:level" not in item.properties
     assert item.get_links("processing-software")[0].target == (
         "https://github.com/MAAP-Project/esa-biomass-gamma0"

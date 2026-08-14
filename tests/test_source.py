@@ -27,7 +27,31 @@ def test_validates_local_source_and_sanitizes_provenance(
         "enclosure_nc": "https://example.test/lut.nc",
         "enclosure_annot_xml": "https://example.test/annotation.xml",
     }
+    assert source.properties == {
+        "start_datetime": "2026-07-31T12:00:00Z",
+        "end_datetime": "2026-07-31T12:00:21Z",
+        "constellation": "Biomass",
+        "sat:orbit_state": "descending",
+        "sat:absolute_orbit": 3017,
+        "sar:observation_direction": "left",
+        "sar:instrument_mode": "SM",
+        "eopf:datatake_id": "24719280",
+        "eofeos:repeat_cycle_id": "1",
+        "eofeos:major_cycle_id": "1",
+    }
     assert "secret" not in repr(source)
+
+
+def test_omits_unavailable_optional_source_properties(
+    staged_paths: dict[str, Path],
+) -> None:
+    """Absent filter properties do not prevent staged-source validation."""
+    write_item(
+        staged_paths["source_item"],
+        properties={"datetime": "2026-07-31T12:00:00Z"},
+    )
+
+    assert validate_staged_source(**staged_paths).properties == {}
 
 
 def test_normalizes_three_dimensional_bbox(staged_paths: dict[str, Path]) -> None:
