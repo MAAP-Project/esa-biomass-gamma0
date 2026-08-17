@@ -4,6 +4,141 @@
   }
 }
 
+.gamma0-map-frame {
+  position: relative;
+  height: calc(100dvh - 16.5rem);
+  overflow: hidden;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 0.2rem;
+}
+
+#gamma0-map {
+  position: absolute;
+  inset: 0;
+}
+
+.gamma0-map-status {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  z-index: 1;
+  padding: 0.45rem 0.7rem;
+  margin: 0;
+  color: var(--md-default-fg-color);
+  background: var(--md-default-bg-color);
+  border-radius: 0.2rem;
+  box-shadow: var(--md-shadow-z1);
+}
+
+.gamma0-map-status--error {
+  color: var(--md-code-hl-string-color);
+}
+
+#gamma0-map .gamma0-map-layers {
+  overflow: hidden;
+  border: 0;
+  color: var(--md-default-fg-color);
+  background: var(--md-default-bg-color);
+  border-radius: 0.2rem;
+  box-shadow: var(--md-shadow-z1);
+}
+
+#gamma0-map .gamma0-map-layers summary {
+  padding: 0.25rem 0.45rem;
+  margin: 0;
+  font-weight: 700;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+#gamma0-map .gamma0-map-layers summary {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#gamma0-map .gamma0-map-layers summary::before {
+  content: none;
+}
+
+#gamma0-map .gamma0-map-layers summary::after {
+  position: static;
+  width: auto;
+  height: auto;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+  transform: none;
+  transition: none;
+}
+
+#gamma0-map .gamma0-map-layers summary::after {
+  content: "+";
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+#gamma0-map .gamma0-map-layers[open] summary::after {
+  content: "−";
+}
+
+#gamma0-map .gamma0-map-layers label {
+  display: flex;
+  gap: 0.45rem;
+  align-items: start;
+  padding: 0.2rem 0.45rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+#gamma0-map .gamma0-map-layers label:last-child {
+  padding-bottom: 0.25rem;
+}
+
+#gamma0-map .gamma0-map-layers input {
+  flex: none;
+  margin: 0.2rem 0 0;
+}
+
+#gamma0-map .maplibregl-ctrl-attrib {
+  max-width: min(20rem, calc(100vw - 2rem));
+  border: 0;
+  color: var(--md-default-fg-color);
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1.35;
+  background: var(--md-default-bg-color);
+  box-shadow: var(--md-shadow-z1);
+}
+
+#gamma0-map .maplibregl-ctrl-attrib summary {
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  font-weight: normal;
+  background-color: transparent;
+  border: 0;
+}
+
+#gamma0-map .maplibregl-ctrl-attrib summary::before,
+#gamma0-map .maplibregl-ctrl-attrib summary::after {
+  content: none;
+}
+
+#gamma0-map .maplibregl-ctrl-attrib a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .gamma0-map-frame {
+    height: calc(100dvh - 16.5rem);
+  }
+}
+
 /* Fix xarray HTML representations in Jupyter notebook renderings.
    mkdocs-material overrides xarray's grid layout and does not provide the
    Jupyter/PyData CSS variables used by xarray's embedded stylesheet. */

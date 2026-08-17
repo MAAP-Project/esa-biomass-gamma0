@@ -8,9 +8,14 @@ theme:
 plugins:
   - mkdocs-jupyter
 extra_css:
+  - https://unpkg.com/maplibre-gl@5.14.0/dist/maplibre-gl.css
   - stylesheets/extra.css
+extra_javascript:
+  - https://unpkg.com/maplibre-gl@5.14.0/dist/maplibre-gl.js
+  - javascripts/map.js
 nav:
   - Overview: index.md
   - Level 1b georeferencing notebook: georeferencing.ipynb
   - MGRS boundary gridding notebook: mgrs-gridding.ipynb
   - Gamma0 Correction Algorithm proof of concept notebook: poc.ipynb
+  - Gamma0 sample map: map.md
