@@ -53,7 +53,7 @@ maap = MAAP()
 QUEUE = "maap-dps-worker-16gb"
 TAG = "mosaic-test"
 ALGORITHM_NAME = "esa_biomass_gamma0_fetch"
-ALGORITHM_VERSION = "0.2.4"  # x-release-please-version
+ALGORITHM_VERSION = "0.2.5"  # x-release-please-version
 
 response = maap.list_algorithms()
 response.raise_for_status()
