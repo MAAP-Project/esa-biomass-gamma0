@@ -2,7 +2,7 @@
   const mapElement = document.querySelector("#gamma0-map");
   const statusElement = document.querySelector("#gamma0-map-status");
   const productTilejsonUrl =
-    "https://titiler-dps-stac.maap-project.org/collections/henrydevseed__esa_biomass_gamma0_fetch_492__0.2.3__mosaic-test/WebMercatorQuad/tilejson.json";
+    "https://titiler-dps-stac.maap-project.org/collections/henrydevseed__esa_biomass_gamma0_fetch_492__0.2.3/WebMercatorQuad/tilejson.json";
   const layers = [
     {
       id: "hls-satellite",
@@ -18,6 +18,7 @@
       title: "Beta0 Intensity HH/HV/VV RGB",
       attribution: "© ESA / BIOMASS Mission (L1b Derived)",
       tilejsonParams: {
+        assets: ["beta0_hh", "beta0_hv", "beta0_vv"],
         expression: "beta0_hh ** 2; beta0_hv ** 2; beta0_vv ** 2",
         rescale: [
           [0.01, 1],
@@ -29,8 +30,8 @@
         pixel_selection: "mean",
         exitwhenfull: false,
         skipcovered: false,
+        time_limit: 10,
       },
-      time_limit: 10,
       visible: false,
     },
     {
@@ -49,8 +50,8 @@
         pixel_selection: "mean",
         exitwhenfull: false,
         skipcovered: false,
+        time_limit: 10,
       },
-      time_limit: 10,
       visible: true,
     },
   ];
